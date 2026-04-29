@@ -96,11 +96,11 @@ function buildSql(): string {
   // teams that Dean (Warheads) and Trevor (Oilers) manage. These are updated
   // via the admin UI if the team assignments change.
   // NOTE: Update these team names if the GM assignments change.
-  out("-- Commissioner flags (update team names here if GMs change teams)");
+  out("-- Commissioner flags");
   out(`UPDATE teams SET gm_email = 'turner@turnerholdings.com', is_commissioner = 1`);
-  out(`  WHERE season_id = 1 AND name = (SELECT name FROM teams WHERE season_id = 1 AND gm_name LIKE '%Dean%' LIMIT 1);`);
+  out(`  WHERE season_id = 1 AND name = 'Oilers';   -- Dean Turner`);
   out(`UPDATE teams SET gm_email = 'trevorjmack@gmail.com',    is_commissioner = 1`);
-  out(`  WHERE season_id = 1 AND name = (SELECT name FROM teams WHERE season_id = 1 AND gm_name LIKE '%Trevor%' LIMIT 1);`);
+  out(`  WHERE season_id = 1 AND name = 'Bunnies';  -- Trevor (Huck) Mack`);
   out('');
 
   out('-- Players');
