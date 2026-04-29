@@ -3,7 +3,8 @@
 // Usage:
 //   npm run sim Bunnies vs Gladiators           (Bunnies = away, Gladiators = home)
 //   npm run sim Bunnies @ Gladiators            (same — "@" reads more naturally)
-//   npm run sim Bunnies @ Gladiators --seed 42
+//   npm run sim -- Bunnies @ Gladiators --seed 42   (the `--` is required so npm
+//                                                    doesn't intercept --seed)
 //
 // Convention: `A vs B` and `A @ B` both treat the SECOND team as home.
 

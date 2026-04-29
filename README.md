@@ -57,7 +57,16 @@ Goalie attributes (`SK, AG, EN, DU, SZ, RB, RT, SC, HS, PH, PS, EX, LD, PO, MO`)
 
 ```bash
 npm install
-npm run sim Bunnies vs Gladiators   # box score for a single game
+
+# Random seed each run
+npm run sim Bunnies vs Gladiators
+
+# Reproducible — note the `--` so npm doesn't eat the flag
+npm run sim -- Bunnies vs Gladiators --seed 42
+
+# Or use the @ separator if you prefer
+npm run sim Bunnies @ Gladiators
+
 npm test                              # run the test suite
 ```
 
