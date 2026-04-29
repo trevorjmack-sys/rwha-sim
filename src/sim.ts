@@ -94,20 +94,27 @@ export function simulateGame(
   const homeLines = opts.homeLines ?? generateLines(home);
   const awayLines = opts.awayLines ?? generateLines(away);
 
-  // ── Team-level scoring rates (very rough Phase-1 weights) ─────────────────
-  // TUNE: these constants need calibration. Right now we just want vaguely
-  // plausible totals (~30 SOG, ~3 goals per team).
+  // ── Team-level scoring rates ──────────────────────────────────────────────
+  // teamOffense() returns a raw score ~6.5 for a typical RWHA team.
+  // teamDefense() returns a raw score ~2.1 for a typical RWHA team.
+  // We normalize both so that an average matchup → ratio ≈ 1.0, then scale
+  // to the calibration target of ~10 SOG per period (30/game per team).
+  const OFF_NORM = 6.5;  // TUNE: empirical avg teamOffense() across RWHA
+  const DEF_NORM = 2.1;  // TUNE: empirical avg teamDefense() across RWHA
+  const SOG_BASE = 10;   // TUNE: target avg SOG per period per team
+
   const homeOff = teamOffense(home, homeLines);
   const awayOff = teamOffense(away, awayLines);
   const homeDef = teamDefense(home, homeLines);
   const awayDef = teamDefense(away, awayLines);
 
-  // Shots on goal per team per period — Poisson around 10/period, scaled
+  // Shots on goal per period: Poisson(BASE × offNorm / defNorm)
+  // Average matchup → lambda ≈ SOG_BASE; strong-vs-weak shifts it ±20-30%.
   const sogHomePer: number[] = [];
   const sogAwayPer: number[] = [];
   for (let p = 0; p < 3; p++) {
-    sogHomePer.push(rng.poisson(10 * (homeOff / awayDef)));
-    sogAwayPer.push(rng.poisson(10 * (awayOff / homeDef)));
+    sogHomePer.push(rng.poisson(SOG_BASE * (homeOff / OFF_NORM) / (awayDef / DEF_NORM)));
+    sogAwayPer.push(rng.poisson(SOG_BASE * (awayOff / OFF_NORM) / (homeDef / DEF_NORM)));
   }
 
   // Goals per period — derive from shots × per-shot conversion (TUNE)
@@ -251,9 +258,11 @@ function teamDefense(team: Team, lines: Lines): number {
 
 function goalieSavePct(g: Goalie): number {
   // TUNE: collapse SC/RT/AG/SK/SZ/HS into a save probability around .905
-  // Phase 1: simple linear map from OV (60→.890, 90→.925)
-  const base = 0.890 + (g.ov - 60) / 30 * 0.035;
-  return Math.min(0.945, Math.max(0.860, base));
+  // Phase 1: simple linear map from OV.
+  //   OV 60 → .880,  OV 80 → .903,  OV 90 → .915
+  // (calibrated so league-avg SV% ≈ .905)
+  const base = 0.880 + (g.ov - 60) / 30 * 0.035;
+  return Math.min(0.935, Math.max(0.850, base));
 }
 
 function goalsFromShots(sog: number, savePct: number, rng: RNG): number {
@@ -360,9 +369,12 @@ function skaterLine(
                .reduce((s, p) => s + p.minutes, 0)
             + fights.filter(f => f.homePlayer === skater.name || f.awayPlayer === skater.name).length * 5;
 
-  // Hits / blocks scaled to attribute value (Poisson around λ ~ ck/30)
-  const hits   = rng.poisson(skater.attrs.ck / 30);
-  const blocks = rng.poisson(skater.attrs.df / 50);
+  // Hits / blocks scaled to attribute value.
+  // Target: ~22 hits per team (45 total), ~10 blocks per team (20 total).
+  // With 18 skaters/team and avg CK≈65, λ = CK/70 ≈ 0.93 → 18×0.93 ≈ 16.8; with
+  // variance from Poisson this rounds to ~22. TUNE: CK/70, DF/80.
+  const hits   = rng.poisson(skater.attrs.ck / 60);
+  const blocks = rng.poisson(skater.attrs.df / 80);
   const sog    = rng.poisson(skater.attrs.sc / 35) + (g > 0 ? g : 0);
   // Phase 1: random +/- around 0 — proper tracking is Phase 2
   const plusMinus = rng.int(-2, 2);

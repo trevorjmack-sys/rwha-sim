@@ -33,13 +33,26 @@ function takeBest(
 }
 
 export function generateLines(team: Team): Lines {
-  // Pro skaters only (farm = depth, not a Phase 1 concern)
-  const skaters = team.proSkaters
+  const proSkaters = team.proSkaters
     .filter(s => !s.injured)
     .sort((a, b) => b.ov - a.ov);
 
-  const forwards = skaters.filter(s => /[CLR]/.test(s.position) && !/D/.test(s.position));
-  const defense  = skaters.filter(s => s.position.includes('D'));
+  const proForwards = proSkaters.filter(s => /[CLR]/.test(s.position) && !/D/.test(s.position));
+  const defense     = proSkaters.filter(s => s.position.includes('D'));
+
+  // If a team is short on forwards (e.g. only 11 healthy pro forwards), call
+  // up the highest-OV eligible farm skaters to fill the gap. This happens
+  // for a small number of RWHA rosters that don't carry a full 12-man forward
+  // group on the pro roster.
+  const neededCallups = Math.max(0, 12 - proForwards.length);
+  const farmCallups = neededCallups > 0
+    ? team.farmSkaters
+        .filter(s => !s.injured && /[CLR]/.test(s.position) && !/D/.test(s.position))
+        .sort((a, b) => b.ov - a.ov)
+        .slice(0, neededCallups)
+    : [];
+
+  const forwards = [...proForwards, ...farmCallups].sort((a, b) => b.ov - a.ov);
 
   // Two-pass forward placement.
   //
