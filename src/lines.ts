@@ -32,23 +32,6 @@ function takeBest(
   return null;
 }
 
-/**
- * Fill `count` slots of a single forward position type from a pool, falling
- * back to multi-position players when pure-position depth runs out.
- */
-function fillForwardSlots(
-  forwards: Skater[],
-  used: Set<Skater>,
-  slot: 'C' | 'L' | 'R',
-  count: number,
-): (Skater | null)[] {
-  const out: (Skater | null)[] = [];
-  for (let i = 0; i < count; i++) {
-    out.push(takeBest(forwards, used, slot));
-  }
-  return out;
-}
-
 export function generateLines(team: Team): Lines {
   // Pro skaters only (farm = depth, not a Phase 1 concern)
   const skaters = team.proSkaters
@@ -58,22 +41,59 @@ export function generateLines(team: Team): Lines {
   const forwards = skaters.filter(s => /[CLR]/.test(s.position) && !/D/.test(s.position));
   const defense  = skaters.filter(s => s.position.includes('D'));
 
-  const used = new Set<Skater>();
+  // Two-pass forward placement.
+  //
+  //   Pass 1 (strict): for each forward by OV desc, place them in the first
+  //     open slot among their listed positions. e.g. a "C/L" player goes to
+  //     C if there's a C slot open, else L.
+  //
+  //   Pass 2 (flex): any forward still unplaced fills any remaining empty slot
+  //     regardless of listed position. This handles teams with imbalanced
+  //     position depth (e.g. a roster heavy on C and L will deploy someone
+  //     on their off-wing for a 4th-line RW slot).
+  //
+  // GMs will override these defaults via the webapp UI in Phase 3.
+  const slots = {
+    C: [null, null, null, null] as (Skater | null)[],
+    L: [null, null, null, null] as (Skater | null)[],
+    R: [null, null, null, null] as (Skater | null)[],
+  };
+  const placed = new Set<Skater>();
 
-  // Build 4 forward lines: prefer pure-position players first, then fill gaps
-  const centres   = fillForwardSlots(forwards, used, 'C', 4);
-  const leftWings = fillForwardSlots(forwards, used, 'L', 4);
-  const rightWngs = fillForwardSlots(forwards, used, 'R', 4);
+  for (const f of forwards) {
+    const positions = f.position
+      .split('/')
+      .filter((p): p is 'C' | 'L' | 'R' => p === 'C' || p === 'L' || p === 'R');
+    for (const p of positions) {
+      const idx = slots[p].findIndex(x => x === null);
+      if (idx >= 0) {
+        slots[p][idx] = f;
+        placed.add(f);
+        break;
+      }
+    }
+  }
+
+  for (const f of forwards) {
+    if (placed.has(f)) continue;
+    for (const k of ['L', 'C', 'R'] as const) {
+      const idx = slots[k].findIndex(x => x === null);
+      if (idx >= 0) {
+        slots[k][idx] = f;
+        placed.add(f);
+        break;
+      }
+    }
+  }
 
   const lines: ForwardLine[] = [];
   for (let i = 0; i < 4; i++) {
-    const c  = centres[i];
-    const lw = leftWings[i];
-    const rw = rightWngs[i];
+    const c = slots.C[i], lw = slots.L[i], rw = slots.R[i];
     if (!c || !lw || !rw) {
       throw new Error(
         `Cannot build forward line ${i + 1} for ${team.name} — missing ` +
-        `${!c ? 'C ' : ''}${!lw ? 'LW ' : ''}${!rw ? 'RW' : ''}`.trim(),
+        `${!c ? 'C ' : ''}${!lw ? 'LW ' : ''}${!rw ? 'RW' : ''}`.trim() +
+        ` (${forwards.length} forwards available)`,
       );
     }
     lines.push({ c, lw, rw });
