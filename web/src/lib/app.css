@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-rwha-bg text-rwha-text font-sans;
+  }
+
+  /* Scoreboard-style stat tables */
+  .stat-table {
+    @apply w-full font-mono text-sm;
+  }
+  .stat-table th {
+    @apply text-rwha-muted text-xs uppercase tracking-widest py-1 px-2 text-right;
+  }
+  .stat-table td {
+    @apply py-1 px-2 text-right text-rwha-text;
+  }
+  .stat-table tr:hover td {
+    @apply bg-rwha-border;
+  }
+  .stat-table .name-col {
+    @apply text-left;
+  }
+
+  /* Card */
+  .card {
+    @apply bg-rwha-surface border border-rwha-border rounded-lg;
+  }
+}
+
+@layer components {
+  /* Nav link */
+  .nav-link {
+    @apply text-rwha-muted hover:text-rwha-amber transition-colors text-sm font-medium uppercase tracking-wider;
+  }
+  .nav-link.active {
+    @apply text-rwha-amber;
+  }
+
+  /* Section header — amber underline rule */
+  .section-header {
+    @apply text-rwha-amber font-mono text-xs uppercase tracking-widest pb-1 border-b border-rwha-amber/30 mb-3;
+  }
+
+  /* Pill badges */
+  .badge-w   { @apply inline-block px-1.5 py-0.5 text-xs font-mono rounded bg-rwha-green/20  text-rwha-green; }
+  .badge-l   { @apply inline-block px-1.5 py-0.5 text-xs font-mono rounded bg-rwha-red/20    text-rwha-red; }
+  .badge-ot  { @apply inline-block px-1.5 py-0.5 text-xs font-mono rounded bg-rwha-amber/20  text-rwha-amber; }
+}

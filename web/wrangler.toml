@@ -1,0 +1,14 @@
+# Cloudflare Pages + Workers config for rwha-sim webapp
+# Deploy: wrangler pages deploy .svelte-kit/cloudflare --project-name rwha-sim
+# Local dev: wrangler pages dev .svelte-kit/cloudflare  (after npm run build)
+#   OR: npm run dev  (Vite dev server — faster for UI work, no D1)
+
+name = "rwha-sim"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".svelte-kit/cloudflare"
+
+[[d1_databases]]
+binding     = "DB"
+database_name = "rwha-sim"
+database_id   = "placeholder"   # replace after: wrangler d1 create rwha-sim

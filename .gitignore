@@ -7,3 +7,9 @@ dist/
 .idea/
 .vscode/
 coverage/
+
+# Phase 3 — webapp
+web/node_modules/
+web/.svelte-kit/
+web/.wrangler/
+scripts/seed.sql
