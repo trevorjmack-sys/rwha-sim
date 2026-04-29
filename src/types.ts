@@ -243,3 +243,63 @@ export interface BoxScore {
   goalies: GoalieStatLine[];
   threeStars: [ThreeStar, ThreeStar, ThreeStar];
 }
+
+// ── Schedule types ────────────────────────────────────────────────────────────
+export interface ScheduledGame {
+  gameId: number;
+  week: number;         // 1-based week number within the season
+  homeTeam: string;
+  awayTeam: string;
+}
+
+// ── Season-level stat accumulation ───────────────────────────────────────────
+export interface TeamSeasonRecord {
+  team: string;
+  gp: number;
+  w: number;
+  l: number;
+  otl: number;           // OT loss (1 point)
+  pts: number;           // W×2 + OTL×1
+  gf: number;
+  ga: number;
+  diff: number;          // GF - GA
+  streak: string;        // e.g. "W3", "L1", "OT2"
+  last10: { w: number; l: number; otl: number };
+}
+
+export interface SkaterSeasonStats {
+  name: string;
+  team: string;
+  position: string;
+  gp: number;
+  g: number;
+  a: number;
+  pts: number;
+  plusMinus: number;
+  pim: number;
+  sog: number;
+  hits: number;
+  blocks: number;
+  ppg: number;           // power-play goals (Phase 2: 0 until PP is modeled)
+}
+
+export interface GoalieSeasonStats {
+  name: string;
+  team: string;
+  gp: number;
+  w: number;
+  l: number;
+  otl: number;
+  ga: number;
+  sa: number;
+  gaa: number;           // goals-against average
+  svPct: number;
+  so: number;            // shutouts
+}
+
+export interface SeasonResults {
+  schedule: ScheduledGame[];
+  standings: TeamSeasonRecord[];
+  skaterStats: SkaterSeasonStats[];
+  goalieStats: GoalieSeasonStats[];
+}

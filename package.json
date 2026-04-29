@@ -9,6 +9,7 @@
   },
   "scripts": {
     "sim": "tsx src/cli.ts",
+    "season": "tsx src/season-cli.ts",
     "calibrate": "tsx src/calibrate.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
