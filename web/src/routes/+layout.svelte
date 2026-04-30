@@ -3,10 +3,13 @@
   import { page } from '$app/stores';
 
   const nav = [
-    { href: '/',         label: 'Standings' },
-    { href: '/scores',   label: 'Scores'    },
-    { href: '/leaders',  label: 'Leaders'   },
-    { href: '/rosters',  label: 'Rosters'   },
+    { href: '/',          label: 'Standings' },
+    { href: '/scores',    label: 'Scores'    },
+    { href: '/schedule',  label: 'Schedule'  },
+    { href: '/teams',     label: 'Teams'     },
+    { href: '/leaders',   label: 'Leaders'   },
+    { href: '/power',     label: 'Power'     },
+    { href: '/rosters',   label: 'Rosters'   },
   ];
 </script>
 

@@ -321,6 +321,167 @@ export async function updateTeamLines(
   `).bind(teamId, useComputer ? 1 : 0, linesJson).run();
 }
 
+// ── Schedule helpers ──────────────────────────────────────────────────────────
+
+export interface WeekSummary {
+  week: number;
+  total: number;
+  played: number;
+}
+
+export interface ScheduleGame {
+  id: number;
+  week: number;
+  home_team_id: number;
+  away_team_id: number;
+  home_name: string;
+  away_name: string;
+  status: string;
+  home_goals: number | null;
+  away_goals: number | null;
+  final_label: string | null;
+}
+
+export interface TeamGame extends ScheduleGame {
+  is_home: boolean;
+  opponent_name: string;
+  team_goals: number | null;
+  opp_goals: number | null;
+}
+
+/** Week summary: total games and how many are complete. */
+export async function getScheduleWeeks(db: D1Database, seasonId: number): Promise<WeekSummary[]> {
+  const { results } = await db.prepare(`
+    SELECT week,
+           COUNT(*) AS total,
+           SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) AS played
+    FROM scheduled_games WHERE season_id = ?
+    GROUP BY week ORDER BY week
+  `).bind(seasonId).all<WeekSummary>();
+  return results;
+}
+
+/** All games for a specific week with results (if complete). */
+export async function getWeekSchedule(
+  db: D1Database, seasonId: number, week: number,
+): Promise<ScheduleGame[]> {
+  const { results } = await db.prepare(`
+    SELECT sg.id, sg.week, sg.home_team_id, sg.away_team_id,
+           h.name AS home_name, a.name AS away_name, sg.status,
+           r.home_goals, r.away_goals, r.final_label
+    FROM scheduled_games sg
+    JOIN teams h ON h.id = sg.home_team_id
+    JOIN teams a ON a.id = sg.away_team_id
+    LEFT JOIN game_results r ON r.game_id = sg.id
+    WHERE sg.season_id = ? AND sg.week = ?
+    ORDER BY sg.id
+  `).bind(seasonId, week).all<ScheduleGame>();
+  return results;
+}
+
+/** All games for a team, annotated with is_home + opponent. */
+export async function getTeamSchedule(
+  db: D1Database, seasonId: number, teamId: number,
+): Promise<TeamGame[]> {
+  const { results } = await db.prepare(`
+    SELECT sg.id, sg.week, sg.home_team_id, sg.away_team_id,
+           h.name AS home_name, a.name AS away_name, sg.status,
+           r.home_goals, r.away_goals, r.final_label
+    FROM scheduled_games sg
+    JOIN teams h ON h.id = sg.home_team_id
+    JOIN teams a ON a.id = sg.away_team_id
+    LEFT JOIN game_results r ON r.game_id = sg.id
+    WHERE sg.season_id = ? AND (sg.home_team_id = ? OR sg.away_team_id = ?)
+    ORDER BY sg.week, sg.id
+  `).bind(seasonId, teamId, teamId).all<ScheduleGame>();
+  return results.map(g => ({
+    ...g,
+    is_home:       g.home_team_id === teamId,
+    opponent_name: g.home_team_id === teamId ? g.away_name : g.home_name,
+    team_goals:    g.home_team_id === teamId ? g.home_goals : g.away_goals,
+    opp_goals:     g.home_team_id === teamId ? g.away_goals : g.home_goals,
+  }));
+}
+
+// ── Team stats ────────────────────────────────────────────────────────────────
+
+export interface TeamStatsRow {
+  team_id: number;
+  team_name: string;
+  gp: number; w: number; l: number; otl: number; pts: number;
+  gf: number; ga: number; sog: number; sa: number;
+}
+
+/** Full team stats table: standings + shots for/against. */
+export async function getTeamStats(db: D1Database, seasonId: number): Promise<TeamStatsRow[]> {
+  const { results } = await db.prepare(`
+    SELECT
+      t.id   AS team_id,
+      t.name AS team_name,
+      COUNT(sg.id) AS gp,
+      COALESCE(SUM(CASE
+        WHEN sg.home_team_id = t.id AND r.home_goals > r.away_goals THEN 1
+        WHEN sg.away_team_id = t.id AND r.away_goals > r.home_goals THEN 1
+        ELSE 0 END), 0) AS w,
+      COALESCE(SUM(CASE
+        WHEN r.final_label = 'FINAL' AND (
+          (sg.home_team_id = t.id AND r.home_goals < r.away_goals) OR
+          (sg.away_team_id = t.id AND r.away_goals < r.home_goals)
+        ) THEN 1 ELSE 0 END), 0) AS l,
+      COALESCE(SUM(CASE
+        WHEN r.final_label != 'FINAL' AND (
+          (sg.home_team_id = t.id AND r.home_goals < r.away_goals) OR
+          (sg.away_team_id = t.id AND r.away_goals < r.home_goals)
+        ) THEN 1 ELSE 0 END), 0) AS otl,
+      COALESCE(SUM(CASE
+        WHEN sg.home_team_id = t.id AND r.home_goals > r.away_goals THEN 2
+        WHEN sg.away_team_id = t.id AND r.away_goals > r.home_goals THEN 2
+        WHEN r.final_label != 'FINAL' AND (
+          (sg.home_team_id = t.id AND r.home_goals < r.away_goals) OR
+          (sg.away_team_id = t.id AND r.away_goals < r.home_goals)
+        ) THEN 1 ELSE 0 END), 0) AS pts,
+      COALESCE(SUM(CASE WHEN sg.home_team_id = t.id THEN r.home_goals ELSE r.away_goals END), 0) AS gf,
+      COALESCE(SUM(CASE WHEN sg.home_team_id = t.id THEN r.away_goals ELSE r.home_goals END), 0) AS ga,
+      COALESCE(SUM(CASE WHEN sg.home_team_id = t.id THEN r.home_sog  ELSE r.away_sog  END), 0) AS sog,
+      COALESCE(SUM(CASE WHEN sg.home_team_id = t.id THEN r.away_sog  ELSE r.home_sog  END), 0) AS sa
+    FROM teams t
+    LEFT JOIN scheduled_games sg ON (sg.home_team_id = t.id OR sg.away_team_id = t.id)
+                                 AND sg.season_id = ? AND sg.status = 'complete'
+    LEFT JOIN game_results r ON r.game_id = sg.id
+    WHERE t.season_id = ?
+    GROUP BY t.id, t.name
+    ORDER BY pts DESC, (gf - ga) DESC, gf DESC
+  `).bind(seasonId, seasonId).all<TeamStatsRow>();
+  return results;
+}
+
+// ── Power rankings raw data ───────────────────────────────────────────────────
+
+export interface PowerGameRow {
+  game_id: number;
+  home_team_id: number;
+  away_team_id: number;
+  home_goals: number;
+  away_goals: number;
+  final_label: string;
+}
+
+/** All completed game results for the season (for power-rankings calc). */
+export async function getPowerGames(
+  db: D1Database, seasonId: number,
+): Promise<PowerGameRow[]> {
+  const { results } = await db.prepare(`
+    SELECT sg.id AS game_id,
+           sg.home_team_id, sg.away_team_id,
+           r.home_goals, r.away_goals, r.final_label
+    FROM scheduled_games sg
+    JOIN game_results r ON r.game_id = sg.id
+    WHERE sg.season_id = ?
+    ORDER BY sg.id ASC
+  `).bind(seasonId).all<PowerGameRow>();
+  return results;
+}
+
 /** Goalie leaders: top N goalies by SV%, minimum 10 GP. */
 export async function getGoalieLeaders(db: D1Database, seasonId: number, limit = 20) {
   const { results } = await db.prepare(`
@@ -345,7 +506,7 @@ export async function getGoalieLeaders(db: D1Database, seasonId: number, limit =
     JOIN scheduled_games sg ON sg.id = ggs.game_id AND sg.season_id = ?
     WHERE p.is_goalie = 1
     GROUP BY p.id, p.name, t.name
-    HAVING gp >= 10
+    HAVING gp >= 1
     ORDER BY sv_pct DESC
     LIMIT ?
   `).bind(seasonId, limit).all();

@@ -10,8 +10,8 @@ export const load: PageServerLoad = async ({ platform }) => {
   const seasonId = await getActiveSeasonId(db) ?? 1;
 
   const [skaters, goalies] = await Promise.all([
-    getScoringLeaders(db, seasonId, 30),
-    getGoalieLeaders(db, seasonId, 20),
+    getScoringLeaders(db, seasonId, 500),   // load all, sort client-side
+    getGoalieLeaders(db, seasonId, 100),
   ]);
 
   return { skaters, goalies };
