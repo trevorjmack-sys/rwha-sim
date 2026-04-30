@@ -1,28 +1,43 @@
 <script lang="ts">
   import '../lib/app.css';
   import { page } from '$app/stores';
+  import type { LayoutData } from './$types';
+  export let data: LayoutData;
 
   const nav = [
     { href: '/',         label: 'Standings' },
     { href: '/scores',   label: 'Scores'    },
     { href: '/schedule', label: 'Schedule'  },
-    { href: '/teams',    label: 'Teams'     },
     { href: '/leaders',  label: 'Leaders'   },
     { href: '/power',    label: 'Power'     },
     { href: '/finance',  label: 'Finance'   },
     { href: '/rosters',  label: 'Rosters'   },
   ];
 
-  let menuOpen = false;
+  let menuOpen    = false;
+  let teamsOpen   = false;
+  let mTeamsOpen  = false;  // mobile teams sub-list
 
-  // Auto-close menu on navigation
-  $: $page.url.pathname, menuOpen = false;
+  // Auto-close everything on navigation
+  $: $page.url.pathname, menuOpen = false, teamsOpen = false, mTeamsOpen = false;
 
   function isActive(href: string) {
     if (href === '/') return $page.url.pathname === '/';
     return $page.url.pathname.startsWith(href);
   }
+
+  $: teamsActive = $page.url.pathname.startsWith('/teams');
+
+  // Close desktop dropdown when clicking outside
+  function handleOutsideClick(e: MouseEvent) {
+    if (teamsOpen) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-teams-menu]')) teamsOpen = false;
+    }
+  }
 </script>
+
+<svelte:window on:click={handleOutsideClick} />
 
 <div class="min-h-screen flex flex-col">
   <!-- ── Header ──────────────────────────────────────────────────────────────── -->
@@ -45,6 +60,44 @@
             class:active={isActive(link.href)}
           >{link.label}</a>
         {/each}
+
+        <!-- Teams dropdown -->
+        <div class="relative shrink-0" data-teams-menu>
+          <button
+            class="nav-link flex items-center gap-1"
+            class:active={teamsActive}
+            on:click|stopPropagation={() => teamsOpen = !teamsOpen}
+          >
+            Teams
+            <span class="text-[10px] opacity-60 transition-transform duration-150
+                         {teamsOpen ? 'rotate-180' : ''}">▾</span>
+          </button>
+
+          {#if teamsOpen}
+            <div class="absolute top-full left-0 mt-1 z-50 bg-rwha-surface border border-rwha-border
+                        rounded shadow-xl py-1 min-w-[200px]"
+                 data-teams-menu>
+              <!-- Stats page link -->
+              <a href="/teams"
+                 class="block px-3 py-1.5 font-mono text-xs text-rwha-muted hover:text-rwha-amber
+                        hover:bg-rwha-amber/5 transition-colors border-b border-rwha-border/40 mb-1">
+                Team Stats ↗
+              </a>
+              <!-- 22 teams in 2-column grid -->
+              <div class="grid grid-cols-2">
+                {#each data.teamNames as name}
+                  <a href="/teams/{name.toLowerCase()}"
+                     class="px-3 py-1 font-mono text-xs transition-colors
+                            {$page.url.pathname === `/teams/${name.toLowerCase()}`
+                              ? 'text-rwha-amber bg-rwha-amber/5'
+                              : 'text-rwha-muted hover:text-rwha-amber hover:bg-rwha-amber/5'}">
+                    {name}
+                  </a>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
       </nav>
 
       <!-- Desktop right side — hidden on mobile -->
@@ -65,12 +118,10 @@
                  hover:text-rwha-amber transition-colors"
         >
           {#if menuOpen}
-            <!-- X icon -->
             <span class="block w-5 h-0.5 bg-current rounded-full rotate-45 translate-y-[7px] transition-all"></span>
             <span class="block w-5 h-0.5 bg-current rounded-full opacity-0 transition-all"></span>
             <span class="block w-5 h-0.5 bg-current rounded-full -rotate-45 -translate-y-[7px] transition-all"></span>
           {:else}
-            <!-- Hamburger icon -->
             <span class="block w-5 h-0.5 bg-current rounded-full transition-all"></span>
             <span class="block w-5 h-0.5 bg-current rounded-full transition-all"></span>
             <span class="block w-5 h-0.5 bg-current rounded-full transition-all"></span>
@@ -90,6 +141,35 @@
                      {isActive(link.href) ? 'text-rwha-amber' : 'text-rwha-muted hover:text-rwha-text'}"
             >{link.label}</a>
           {/each}
+
+          <!-- Mobile Teams section -->
+          <button
+            on:click={() => mTeamsOpen = !mTeamsOpen}
+            class="py-3 border-b border-rwha-border/30 font-mono text-sm text-left flex items-center justify-between
+                   {teamsActive ? 'text-rwha-amber' : 'text-rwha-muted hover:text-rwha-text'} transition-colors"
+          >
+            <span>Teams</span>
+            <span class="text-xs opacity-60 transition-transform duration-150 {mTeamsOpen ? 'rotate-180' : ''}">▾</span>
+          </button>
+
+          {#if mTeamsOpen}
+            <div class="grid grid-cols-3 gap-x-2 py-2 border-b border-rwha-border/30">
+              <a href="/teams"
+                 class="col-span-3 py-1.5 font-mono text-xs text-rwha-muted hover:text-rwha-amber transition-colors">
+                Team Stats ↗
+              </a>
+              {#each data.teamNames as name}
+                <a href="/teams/{name.toLowerCase()}"
+                   class="py-1.5 font-mono text-xs transition-colors truncate
+                          {$page.url.pathname === `/teams/${name.toLowerCase()}`
+                            ? 'text-rwha-amber'
+                            : 'text-rwha-muted hover:text-rwha-text'}">
+                  {name}
+                </a>
+              {/each}
+            </div>
+          {/if}
+
           <a href="/admin" class="py-3 font-mono text-sm text-rwha-red">⚡ Admin</a>
         </nav>
       </div>
