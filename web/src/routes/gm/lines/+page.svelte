@@ -55,7 +55,8 @@
 
   function playerLabel(p: typeof data.players[0]) {
     const inj = p.injured_games_remaining > 0 ? ' ⚠' : '';
-    return `${p.name} (${p.ov})${inj}`;
+    const pos = p.is_goalie ? 'G' : p.position.replace(/\//g, ',');
+    return `${p.name}  —  ${pos}  (${p.ov})${inj}`;
   }
 
   function slotClass(id: number) {
