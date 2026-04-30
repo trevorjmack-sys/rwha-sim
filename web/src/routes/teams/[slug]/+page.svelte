@@ -3,10 +3,10 @@
   import type { PageData } from './$types';
   export let data: PageData;
 
-  $: ({ team, games, record, roster } = data);
+  $: ({ team, games, record, roster, teamStats } = data);
 
   // ── Tab state (default: roster) ───────────────────────────────────────────
-  type Tab = 'roster' | 'schedule';
+  type Tab = 'roster' | 'schedule' | 'stats';
   let tab: Tab = ($page.url.searchParams.get('tab') as Tab) ?? 'roster';
 
   // ── Roster helpers ────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@
 
 <!-- ── Tab bar ─────────────────────────────────────────────────────────────────── -->
 <div class="flex gap-1 font-mono text-sm mb-5">
-  {#each (['roster', 'schedule'] as Tab[]) as t}
+  {#each (['roster', 'stats', 'schedule'] as Tab[]) as t}
     <button
       class="px-4 py-1.5 rounded border transition-colors capitalize
              {tab === t
@@ -313,6 +313,103 @@
         </div>
       {/if}
     </details>
+  {/if}
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- STATS TAB                                                                   -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+{:else if tab === 'stats'}
+
+  {#if teamStats.gp === 0}
+    <div class="card p-8 text-center text-rwha-muted font-mono text-sm">
+      No games played yet — check back after the first week.
+    </div>
+  {:else}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+      <!-- Scoring -->
+      <div class="card px-4 py-4">
+        <div class="section-header mb-3">Scoring</div>
+        <div class="space-y-2">
+          {#each [
+            ['Goals For',  teamStats.gf, `${teamStats.gfPg}/gm`],
+            ['Goals Against', teamStats.ga, `${teamStats.gaPg}/gm`],
+            ['Goal Diff', teamStats.gf - teamStats.ga, null],
+          ] as [label, val, sub]}
+            <div class="flex items-center justify-between font-mono text-sm">
+              <span class="text-rwha-muted">{label}</span>
+              <span class="font-bold
+                {label === 'Goals For' ? 'text-rwha-green'
+                  : label === 'Goals Against' ? 'text-rwha-red'
+                  : (teamStats.gf - teamStats.ga) > 0 ? 'text-rwha-green'
+                  : (teamStats.gf - teamStats.ga) < 0 ? 'text-rwha-red'
+                  : 'text-rwha-muted'}">
+                {label === 'Goal Diff' && (teamStats.gf - teamStats.ga) > 0 ? '+' : ''}{val}
+                {#if sub}<span class="text-rwha-muted font-normal text-xs ml-1">({sub})</span>{/if}
+              </span>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Shots -->
+      <div class="card px-4 py-4">
+        <div class="section-header mb-3">Shots on Goal</div>
+        <div class="space-y-2">
+          {#each [
+            ['SOG For',     teamStats.sog,  `${teamStats.sogPg}/gm`],
+            ['SOG Against', teamStats.sogA, `${teamStats.sogAPg}/gm`],
+            ['Shot Diff', teamStats.sog - teamStats.sogA, null],
+          ] as [label, val, sub]}
+            <div class="flex items-center justify-between font-mono text-sm">
+              <span class="text-rwha-muted">{label}</span>
+              <span class="font-bold text-rwha-text">
+                {label === 'Shot Diff' && (teamStats.sog - teamStats.sogA) > 0 ? '+' : ''}{val}
+                {#if sub}<span class="text-rwha-muted font-normal text-xs ml-1">({sub})</span>{/if}
+              </span>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Special Teams -->
+      <div class="card px-4 py-4">
+        <div class="section-header mb-3">Special Teams</div>
+        <div class="space-y-2">
+          {#each [
+            ['Power Play',   `${teamStats.ppGoals}/${teamStats.ppOpps}`, `${teamStats.ppPct}%`],
+            ['Penalty Kill', `${teamStats.pkOpps - teamStats.pkGoalsA}/${teamStats.pkOpps}`, `${teamStats.pkPct}%`],
+          ] as [label, record, pct]}
+            <div class="flex items-center justify-between font-mono text-sm">
+              <span class="text-rwha-muted">{label}</span>
+              <span class="font-bold text-rwha-amber">
+                {pct}
+                <span class="text-rwha-muted font-normal text-xs ml-1">({record})</span>
+              </span>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Other -->
+      <div class="card px-4 py-4">
+        <div class="section-header mb-3">Per Game</div>
+        <div class="space-y-2">
+          {#each [
+            ['Face-off %',  `${teamStats.foPct}%`],
+            ['Hits',        teamStats.hitsPg],
+            ['Blocks',      teamStats.blocksPg],
+            ['PIM',         teamStats.pimPg],
+          ] as [label, val]}
+            <div class="flex items-center justify-between font-mono text-sm">
+              <span class="text-rwha-muted">{label}</span>
+              <span class="font-bold text-rwha-text">{val}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+    </div>
   {/if}
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
