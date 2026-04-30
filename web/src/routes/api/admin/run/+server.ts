@@ -20,10 +20,12 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   if (!db) throw error(500, 'Database not available');
 
   // Parse body
+  // count 1-5  → normal (animated reveal on client)
+  // count 6-20 → bulk mode used by "run season" loop
   let count = 1;
   try {
     const body = await request.json() as { count?: number };
-    count = Math.min(5, Math.max(1, body.count ?? 1));
+    count = Math.min(20, Math.max(1, body.count ?? 1));
   } catch { /* default to 1 */ }
 
   const seasonId = await getActiveSeasonId(db);

@@ -31,6 +31,10 @@
   let playedCount     = data.playedGames;   // updated locally after each batch
   let showNextWeek    = false;              // show reload prompt when week is done
 
+  // ── Run entire season ──────────────────────────────────────────────────────
+  let seasonRunning   = false;
+  let seasonDone      = 0;   // games completed so far during bulk run
+
   // ── Run games ──────────────────────────────────────────────────────────────
   async function runGames(count: number) {
     running      = true;
@@ -114,6 +118,43 @@
     return new Promise(r => setTimeout(r, ms));
   }
 
+  async function runSeason() {
+    seasonRunning = true;
+    seasonDone    = 0;
+    message       = '';
+    showNextWeek  = false;
+
+    try {
+      while (true) {
+        const res = await fetch('/api/admin/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count: 20 }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json() as { message?: string };
+          message = err.message ?? `Error ${res.status}`;
+          break;
+        }
+
+        const { games, message: msg } = await res.json() as {
+          games: { gameId: number }[];
+          message?: string;
+        };
+
+        if (msg || games.length === 0) break;   // season complete
+
+        seasonDone   += games.length;
+        playedCount  += games.length;
+      }
+    } finally {
+      seasonRunning = false;
+      // Reload so the game cards reflect the finished state
+      window.location.reload();
+    }
+  }
+
   // ── Display helpers ────────────────────────────────────────────────────────
   function winnerClass(card: GameCard, side: 'home' | 'away') {
     if (card.status !== 'revealed' && card.status !== 'complete') return '';
@@ -193,10 +234,25 @@
              {running || scheduledCards.length === 0
                ? 'bg-rwha-border text-rwha-muted cursor-not-allowed'
                : 'bg-rwha-amber text-rwha-bg hover:brightness-110 active:scale-95 shadow-lg shadow-rwha-amber/20'}"
-      disabled={running || scheduledCards.length === 0}
+      disabled={running || seasonRunning || scheduledCards.length === 0}
       on:click={() => runGames(batchCount)}
     >
       {running ? '⏳ Simulating…' : '▶ Run Games'}
+    </button>
+
+    <button
+      class="px-5 py-2 rounded font-mono font-bold text-sm uppercase tracking-widest transition-all border
+             {seasonRunning || running || remaining === 0
+               ? 'border-rwha-border text-rwha-muted cursor-not-allowed'
+               : 'border-rwha-red/60 text-rwha-red hover:bg-rwha-red/10 active:scale-95'}"
+      disabled={seasonRunning || running || remaining === 0}
+      on:click={runSeason}
+    >
+      {#if seasonRunning}
+        ⏳ {seasonDone} games…
+      {:else}
+        ▶▶ Run Season
+      {/if}
     </button>
   </div>
 </div>
