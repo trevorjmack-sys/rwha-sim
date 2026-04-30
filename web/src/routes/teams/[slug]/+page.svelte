@@ -3,7 +3,7 @@
   import type { PageData } from './$types';
   export let data: PageData;
 
-  const { team, games, record, roster } = data;
+  $: ({ team, games, record, roster } = data);
 
   // ── Tab state (default: roster) ───────────────────────────────────────────
   type Tab = 'roster' | 'schedule';
