@@ -16,6 +16,7 @@
     ov: number;
     is_goalie: boolean;
     injured_games_remaining: number;
+    is_personal: boolean;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,6 +47,7 @@
         id: p.id, name: p.name, position: p.position, ov: p.ov,
         is_goalie: !!p.is_goalie,
         injured_games_remaining: p.injured_games_remaining,
+        is_personal: !!(p as any).is_personal,
       });
     }
     for (const k of Object.keys(c) as Column[]) c[k] = sortCards(c[k]);
@@ -343,12 +345,18 @@
                 {#if card.injured_games_remaining > 0}
                   <span class="text-rwha-red">⚠</span>{' '}
                 {/if}
+                {#if card.is_personal}
+                  <span class="text-rwha-amber" title="Personal player">★</span>{' '}
+                {/if}
                 {card.name}
               </span>
               <span class="font-mono text-xs font-bold text-rwha-amber shrink-0">{card.ov}</span>
             </div>
             <div class="font-mono text-[10px] text-rwha-muted mt-0.5 leading-tight">
               {card.is_goalie ? 'G' : card.position.replace(/\//g, ',')}
+              {#if card.is_personal}
+                <span class="text-rwha-amber/60 ml-1">$8.5M</span>
+              {/if}
               {#if card.injured_games_remaining > 0}
                 <span class="text-rwha-red ml-1">INJ·{card.injured_games_remaining}g</span>
               {/if}

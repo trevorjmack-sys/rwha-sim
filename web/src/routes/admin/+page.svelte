@@ -128,6 +128,35 @@
 
   $: remaining      = data.totalGames - playedCount;
   $: scheduledCards = cards.filter(c => c.status === 'scheduled');
+
+  // ── Personal player import ─────────────────────────────────────────────────
+  let personalUrl    = '';
+  let personalMsg    = '';
+  let personalOk     = false;
+  let personalBusy   = false;
+
+  async function importPersonal() {
+    if (!personalUrl.trim()) return;
+    personalBusy = true; personalMsg = ''; personalOk = false;
+    try {
+      const res = await fetch('/api/admin/import-personal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csvUrl: personalUrl.trim() }),
+      });
+      const body = await res.json() as { ok?: boolean; imported?: number; message?: string };
+      if (res.ok && body.ok) {
+        personalOk  = true;
+        personalMsg = `✓ Imported ${body.imported} personal players`;
+      } else {
+        personalMsg = body.message ?? `Error ${res.status}`;
+      }
+    } catch (e) {
+      personalMsg = String(e);
+    } finally {
+      personalBusy = false;
+    }
+  }
 </script>
 
 <svelte:head><title>Admin — RWHA Sim</title></svelte:head>
@@ -301,3 +330,43 @@
     All games in this week are complete.
   </div>
 {/if}
+
+<!-- ── Personal player import ────────────────────────────────────────────── -->
+<div class="mt-10">
+  <div class="section-header">Personal Players</div>
+  <div class="card px-4 py-4">
+    <p class="font-mono text-xs text-rwha-muted mb-3">
+      Paste the published Google Sheet CSV URL (File → Share → Publish to web → CSV).
+      Clears all existing personal players and imports the 22 rows fresh.
+      Required columns: <span class="text-rwha-text">team, name, position, age, ov, ck, fg, di, sk, st, en, du, ph, fo, pa, sc, df, ps, ex, ld, po, mo</span>
+    </p>
+
+    <div class="flex gap-2">
+      <input
+        type="url"
+        bind:value={personalUrl}
+        placeholder="https://docs.google.com/spreadsheets/d/…/export?format=csv"
+        class="flex-1 bg-rwha-bg border border-rwha-border rounded px-3 py-2
+               font-mono text-xs text-rwha-text placeholder:text-rwha-muted/50
+               focus:outline-none focus:border-rwha-amber/60 transition-colors"
+      />
+      <button
+        disabled={personalBusy || !personalUrl.trim()}
+        on:click={importPersonal}
+        class="px-5 py-2 rounded font-mono font-bold text-xs uppercase tracking-widest transition-all shrink-0
+               {personalBusy || !personalUrl.trim()
+                 ? 'bg-rwha-border text-rwha-muted cursor-not-allowed'
+                 : 'bg-rwha-amber text-rwha-bg hover:brightness-110 active:scale-95'}"
+      >{personalBusy ? '⏳ Importing…' : 'Import'}</button>
+    </div>
+
+    {#if personalMsg}
+      <div class="mt-3 p-2 rounded font-mono text-xs
+                  {personalOk
+                    ? 'bg-rwha-green/10 border border-rwha-green/30 text-rwha-green'
+                    : 'bg-rwha-red/10 border border-rwha-red/30 text-rwha-red'}">
+        {personalMsg}
+      </div>
+    {/if}
+  </div>
+</div>

@@ -31,6 +31,7 @@ export interface PlayerRow {
   is_scratch: number;
   injured_games_remaining: number;
   suspended_games_remaining: number;
+  is_personal: number;
 }
 
 export interface GameRow {
