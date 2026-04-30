@@ -9,6 +9,7 @@
     { href: '/teams',     label: 'Teams'     },
     { href: '/leaders',   label: 'Leaders'   },
     { href: '/power',     label: 'Power'     },
+    { href: '/finance',   label: 'Finance'   },
     { href: '/rosters',   label: 'Rosters'   },
   ];
 </script>
