@@ -44,9 +44,10 @@
   <div class="flex items-center gap-4">
     <!-- Away -->
     <div class="flex-1 text-right">
-      <div class="text-xl font-bold uppercase tracking-widest {awayWon ? 'text-rwha-amber' : 'text-rwha-muted'}">
+      <a href="/teams/{data.awayName.toLowerCase()}"
+         class="text-xl font-bold uppercase tracking-widest hover:brightness-110 transition-colors {awayWon ? 'text-rwha-amber' : 'text-rwha-muted'}">
         {data.awayName}
-      </div>
+      </a>
       <div class="text-xs font-mono text-rwha-muted mt-0.5">Away</div>
     </div>
 
@@ -69,9 +70,10 @@
 
     <!-- Home -->
     <div class="flex-1">
-      <div class="text-xl font-bold uppercase tracking-widest {homeWon ? 'text-rwha-amber' : 'text-rwha-muted'}">
+      <a href="/teams/{data.homeName.toLowerCase()}"
+         class="text-xl font-bold uppercase tracking-widest hover:brightness-110 transition-colors {homeWon ? 'text-rwha-amber' : 'text-rwha-muted'}">
         {data.homeName}
-      </div>
+      </a>
       <div class="text-xs font-mono text-rwha-muted mt-0.5">Home</div>
     </div>
   </div>
@@ -106,7 +108,7 @@
       ] as row}
         <tr>
           <td class="name-col pl-4 font-semibold uppercase tracking-wide text-xs {row.won ? 'text-rwha-amber' : ''}">
-            {row.name}
+            <a href="/teams/{row.name.toLowerCase()}" class="hover:brightness-110 transition-colors">{row.name}</a>
           </td>
           {#each { length: periods } as _, i}
             <td>{row.byPeriod[i] ?? 0}</td>

@@ -4,8 +4,9 @@
   export let data: LayoutData;
 
   const tabs = [
-    { href: '/gm/roster', label: 'Roster'  },
-    { href: '/gm/lines',  label: 'Lines'   },
+    { href: '/gm',        label: 'Overview', exact: true  },
+    { href: '/gm/roster', label: 'Roster',   exact: false },
+    { href: '/gm/lines',  label: 'Lines',    exact: false },
   ];
 </script>
 
@@ -25,7 +26,7 @@
         <a
           href={t.href}
           class="px-4 py-1.5 rounded border transition-colors
-                 {$page.url.pathname.startsWith(t.href)
+                 {(t.exact ? $page.url.pathname === t.href : $page.url.pathname.startsWith(t.href))
                    ? 'border-rwha-amber bg-rwha-amber/10 text-rwha-amber'
                    : 'border-rwha-border text-rwha-muted hover:border-rwha-amber/40'}"
         >{t.label}</a>

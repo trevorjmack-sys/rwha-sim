@@ -51,9 +51,10 @@
 
           <!-- Away team -->
           <div class="flex-1 text-right">
-            <span class="font-semibold uppercase tracking-wide text-sm {winner(g.home_goals, g.away_goals, 'away')}">
+            <a href="/teams/{g.away_name.toLowerCase()}"
+               class="font-semibold uppercase tracking-wide text-sm hover:brightness-110 transition-colors {winner(g.home_goals, g.away_goals, 'away')}">
               {g.away_name}
-            </span>
+            </a>
           </div>
 
           <!-- Score -->
@@ -74,9 +75,10 @@
 
           <!-- Home team -->
           <div class="flex-1">
-            <span class="font-semibold uppercase tracking-wide text-sm {winner(g.home_goals, g.away_goals, 'home')}">
+            <a href="/teams/{g.home_name.toLowerCase()}"
+               class="font-semibold uppercase tracking-wide text-sm hover:brightness-110 transition-colors {winner(g.home_goals, g.away_goals, 'home')}">
               {g.home_name}
-            </span>
+            </a>
           </div>
 
           <!-- Box score link -->
