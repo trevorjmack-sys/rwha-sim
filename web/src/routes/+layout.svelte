@@ -78,11 +78,6 @@
           <div class="absolute top-full left-0 mt-1 bg-rwha-surface border border-rwha-border
                       rounded shadow-xl py-1 min-w-[200px]"
                style="z-index: 50;">
-            <a href="/teams"
-               class="block px-3 py-1.5 font-mono text-xs text-rwha-muted hover:text-rwha-amber
-                      hover:bg-rwha-amber/5 transition-colors border-b border-rwha-border/40 mb-1">
-              Team Stats ↗
-            </a>
             <div class="grid grid-cols-2">
               {#each teamNames as name}
                 <a href="/teams/{name.toLowerCase()}"
@@ -152,10 +147,6 @@
 
           {#if mTeamsOpen}
             <div class="grid grid-cols-3 gap-x-2 py-2 border-b border-rwha-border/30">
-              <a href="/teams"
-                 class="col-span-3 py-1.5 font-mono text-xs text-rwha-muted hover:text-rwha-amber transition-colors">
-                Team Stats ↗
-              </a>
               {#each teamNames as name}
                 <a href="/teams/{name.toLowerCase()}"
                    class="py-1.5 font-mono text-xs transition-colors truncate
