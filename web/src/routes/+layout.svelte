@@ -52,49 +52,51 @@
             class:active={isActive(link.href)}
           >{link.label}</a>
         {/each}
-
-        <!-- Teams dropdown -->
-        <div class="relative shrink-0">
-          <button
-            class="nav-link flex items-center gap-1"
-            class:active={teamsActive}
-            on:click={() => teamsOpen = !teamsOpen}
-          >
-            Teams
-            <span class="text-[10px] opacity-60 ml-0.5">{teamsOpen ? '▴' : '▾'}</span>
-          </button>
-
-          {#if teamsOpen}
-            <!-- Invisible backdrop — clicking it closes the dropdown -->
-            <button
-              class="fixed inset-0 z-40 cursor-default"
-              tabindex="-1"
-              aria-hidden="true"
-              on:click={() => teamsOpen = false}
-            />
-            <!-- Dropdown panel -->
-            <div class="absolute top-full left-0 mt-1 z-50 bg-rwha-surface border border-rwha-border
-                        rounded shadow-xl py-1 min-w-[200px]">
-              <a href="/teams"
-                 class="block px-3 py-1.5 font-mono text-xs text-rwha-muted hover:text-rwha-amber
-                        hover:bg-rwha-amber/5 transition-colors border-b border-rwha-border/40 mb-1">
-                Team Stats ↗
-              </a>
-              <div class="grid grid-cols-2">
-                {#each teamNames as name}
-                  <a href="/teams/{name.toLowerCase()}"
-                     class="px-3 py-1 font-mono text-xs transition-colors
-                            {$page.url.pathname === `/teams/${name.toLowerCase()}`
-                              ? 'text-rwha-amber bg-rwha-amber/5'
-                              : 'text-rwha-muted hover:text-rwha-amber hover:bg-rwha-amber/5'}">
-                    {name}
-                  </a>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        </div>
       </nav>
+
+      <!-- Teams dropdown — sibling of nav so overflow-x-auto doesn't clip it -->
+      <div class="hidden md:block relative shrink-0">
+        <button
+          class="nav-link flex items-center gap-1"
+          class:active={teamsActive}
+          on:click={() => teamsOpen = !teamsOpen}
+        >
+          Teams
+          <span class="text-[10px] opacity-60 ml-0.5">{teamsOpen ? '▴' : '▾'}</span>
+        </button>
+
+        {#if teamsOpen}
+          <!-- Backdrop -->
+          <button
+            class="fixed inset-0 cursor-default"
+            style="z-index: 49;"
+            tabindex="-1"
+            aria-hidden="true"
+            on:click={() => teamsOpen = false}
+          />
+          <!-- Dropdown panel -->
+          <div class="absolute top-full left-0 mt-1 bg-rwha-surface border border-rwha-border
+                      rounded shadow-xl py-1 min-w-[200px]"
+               style="z-index: 50;">
+            <a href="/teams"
+               class="block px-3 py-1.5 font-mono text-xs text-rwha-muted hover:text-rwha-amber
+                      hover:bg-rwha-amber/5 transition-colors border-b border-rwha-border/40 mb-1">
+              Team Stats ↗
+            </a>
+            <div class="grid grid-cols-2">
+              {#each teamNames as name}
+                <a href="/teams/{name.toLowerCase()}"
+                   class="px-3 py-1 font-mono text-xs transition-colors
+                          {$page.url.pathname === `/teams/${name.toLowerCase()}`
+                            ? 'text-rwha-amber bg-rwha-amber/5'
+                            : 'text-rwha-muted hover:text-rwha-amber hover:bg-rwha-amber/5'}">
+                  {name}
+                </a>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      </div>
 
       <!-- Desktop right side — hidden on mobile -->
       <div class="hidden md:flex ml-auto items-center gap-4 shrink-0">
