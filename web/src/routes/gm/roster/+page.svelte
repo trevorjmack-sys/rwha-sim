@@ -1,257 +1,262 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import type { PageData } from './$types';
+  import type { PageData, ActionData } from './$types';
+
   export let data: PageData;
+  export let form: ActionData;
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  function x(pos: string, check: string) {
-    return pos.split('/').includes(check) ? 'X' : '';
-  }
-  function fmtSal(s: number | null) {
-    if (!s) return '—';
-    return '$' + s.toLocaleString('en-US');
-  }
-  function fmtCon(inj: number) {
-    return inj > 0 ? (100 - inj * 5).toFixed(2) : '100.00';
-  }
-  function a(attrs: Record<string, number>, key: string) {
-    return attrs[key] ?? '—';
-  }
-  function attrClass(v: unknown) {
-    const n = Number(v);
-    if (n >= 90) return 'text-rwha-amber font-bold';
-    if (n >= 80) return 'text-rwha-text';
-    return 'text-rwha-muted';
-  }
-  function parseAttrs(json: string): Record<string, number> {
-    try { return JSON.parse(json); } catch { return {}; }
+  // ── Types ────────────────────────────────────────────────────────────────────
+  type Column = 'proDress' | 'proScratch' | 'farmDress' | 'farmScratch';
+
+  interface Card {
+    id: number;
+    name: string;
+    position: string;
+    ov: number;
+    is_goalie: boolean;
+    injured_games_remaining: number;
   }
 
-  const SKATER_COLS = ['ck','fg','di','sk','st','en','du','ph','fo','pa','sc','df','ps','ex','ld','po','mo'] as const;
-  const GOALIE_COLS = ['sk','du','en','sz','ag','rb','sc','hs','rt','ph','ps','ex','ld','po','mo'] as const;
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function isDefense(pos: string) {
+    return pos.split('/').some(p => p === 'D' || /^[LR]D$/.test(p));
+  }
 
-  // ── Derived groups ──────────────────────────────────────────────────────────
-  function isD(pos: string) { return pos.split('/').includes('D'); }
+  function colKey(level: string, scratch: number): Column {
+    if (level === 'pro') return scratch ? 'proScratch' : 'proDress';
+    return scratch ? 'farmScratch' : 'farmDress';
+  }
 
-  $: proSkaters  = [
-    ...data.players.filter(p => p.roster_level === 'pro' && !p.is_goalie && !isD(p.position)),
-    ...data.players.filter(p => p.roster_level === 'pro' && !p.is_goalie &&  isD(p.position)),
-  ];
-  $: proGoalies  = data.players.filter(p => p.roster_level === 'pro'  && !!p.is_goalie);
-  $: farmSkaters = [
-    ...data.players.filter(p => p.roster_level === 'farm' && !p.is_goalie && !isD(p.position)),
-    ...data.players.filter(p => p.roster_level === 'farm' && !p.is_goalie &&  isD(p.position)),
-  ];
-  $: farmGoalies = data.players.filter(p => p.roster_level === 'farm' && !!p.is_goalie);
+  function sortCards(cards: Card[]): Card[] {
+    return [...cards].sort((a, b) => {
+      // Forwards (0) → Defense (1) → Goalies (2), then by OV desc
+      const rank = (c: Card) => c.is_goalie ? 2 : isDefense(c.position) ? 1 : 0;
+      const dr = rank(a) - rank(b);
+      return dr !== 0 ? dr : b.ov - a.ov;
+    });
+  }
 
-  $: activePro     = data.players.filter(p => p.roster_level === 'pro' && !p.is_scratch);
-  $: activeSkaters = activePro.filter(p => !p.is_goalie).length;
-  $: activeGoalies = activePro.filter(p =>  p.is_goalie).length;
-  $: scratchCount  = data.players.filter(p => p.roster_level === 'pro' && p.is_scratch).length;
+  // ── Initialise columns from server data ──────────────────────────────────────
+  function initCols(): Record<Column, Card[]> {
+    const c: Record<Column, Card[]> = {
+      proDress: [], proScratch: [], farmDress: [], farmScratch: [],
+    };
+    for (const p of data.players) {
+      c[colKey(p.roster_level, p.is_scratch)].push({
+        id: p.id,
+        name: p.name,
+        position: p.position,
+        ov: p.ov,
+        is_goalie: !!p.is_goalie,
+        injured_games_remaining: p.injured_games_remaining,
+      });
+    }
+    for (const k of Object.keys(c) as Column[]) c[k] = sortCards(c[k]);
+    return c;
+  }
+
+  let cols = initCols();
+
+  // ── Dirty tracking ───────────────────────────────────────────────────────────
+  // Snapshot original positions so we know what actually changed
+  const original = new Map(
+    data.players.map(p => [p.id, { roster_level: p.roster_level, is_scratch: p.is_scratch as number }])
+  );
+
+  function getDirty(c: Record<Column, Card[]>) {
+    const moves: { id: number; roster_level: string; is_scratch: number }[] = [];
+    for (const col of Object.keys(c) as Column[]) {
+      const roster_level = col.startsWith('pro') ? 'pro' : 'farm';
+      const is_scratch   = col.endsWith('Scratch') ? 1 : 0;
+      for (const card of c[col]) {
+        const orig = original.get(card.id);
+        if (orig && (orig.roster_level !== roster_level || orig.is_scratch !== is_scratch)) {
+          moves.push({ id: card.id, roster_level, is_scratch });
+        }
+      }
+    }
+    return moves;
+  }
+
+  $: dirty     = getDirty(cols);
+  $: movesJson = JSON.stringify(dirty);
+
+  // ── Roster completeness ──────────────────────────────────────────────────────
+  $: proSkaters  = cols.proDress.filter(c => !c.is_goalie).length;
+  $: proGoalies  = cols.proDress.filter(c => c.is_goalie).length;
+  $: rosterOk    = proSkaters >= 12 && proGoalies >= 2;
+
+  // ── Drag-and-drop state ──────────────────────────────────────────────────────
+  let dragId:     number | null = null;
+  let dragFrom:   Column | null = null;
+  let dropTarget: Column | null = null;
+
+  function startDrag(e: DragEvent, id: number, from: Column) {
+    dragId   = id;
+    dragFrom = from;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(id));
+    }
+  }
+
+  function onDragOver(e: DragEvent, col: Column) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    dropTarget = col;
+  }
+
+  function onDrop(e: DragEvent, to: Column) {
+    e.preventDefault();
+    dropTarget = null;
+    if (dragId === null || !dragFrom || dragFrom === to) {
+      dragId = null; dragFrom = null;
+      return;
+    }
+    const id   = dragId;
+    const from = dragFrom;
+    const card = cols[from].find(c => c.id === id);
+    if (!card) { dragId = null; dragFrom = null; return; }
+
+    cols[from] = cols[from].filter(c => c.id !== id);
+    cols[to]   = [...cols[to], card];
+    cols = { ...cols };  // trigger Svelte reactivity
+
+    dragId = null; dragFrom = null;
+  }
+
+  function onDragEnd() {
+    dragId = null; dragFrom = null; dropTarget = null;
+  }
+
+  // ── Column metadata ──────────────────────────────────────────────────────────
+  const COL_META: Record<Column, { label: string; headerClass: string }> = {
+    proDress:    { label: 'Pro Dress',    headerClass: 'text-rwha-amber'  },
+    proScratch:  { label: 'Pro Scratch',  headerClass: 'text-rwha-red'    },
+    farmDress:   { label: 'Farm Dress',   headerClass: 'text-rwha-muted'  },
+    farmScratch: { label: 'Farm Scratch', headerClass: 'text-rwha-muted'  },
+  };
 </script>
 
-<svelte:head><title>My Roster — RWHA Sim</title></svelte:head>
+<svelte:head><title>Roster — RWHA Sim</title></svelte:head>
 
-<!-- Summary bar -->
-<div class="mb-4 flex gap-4 font-mono text-xs text-rwha-muted">
-  <span>Active: <span class="text-rwha-text font-semibold">{activeSkaters}</span> skaters · <span class="text-rwha-text font-semibold">{activeGoalies}</span> goalies</span>
-  <span class="text-rwha-border">|</span>
-  <span>Scratched: <span class="{scratchCount > 0 ? 'text-rwha-amber' : 'text-rwha-muted'} font-semibold">{scratchCount}</span></span>
-</div>
+<!-- ── Top bar ───────────────────────────────────────────────────────────────── -->
+<div class="mb-4 flex items-center justify-between gap-4 flex-wrap">
 
-<!-- ── Pro Skaters ─────────────────────────────────────────────────────────── -->
-<div class="section-header">Pro Roster</div>
-<div class="card mb-3 overflow-x-auto">
-  <table class="stat-table text-xs whitespace-nowrap">
-    <thead>
-      <tr class="border-b border-rwha-border">
-        <th class="pl-3 w-8 sticky left-0 bg-rwha-surface">SCR</th>
-        <th class="text-left pl-2 sticky left-8 bg-rwha-surface min-w-[150px]">Player</th>
-        <th class="w-5">C</th><th class="w-5">L</th><th class="w-5">R</th><th class="w-5">D</th>
-        <th>CON</th><th>IJ</th>
-        {#each SKATER_COLS as col}<th class="uppercase">{col}</th>{/each}
-        <th class="text-rwha-amber">OV</th>
-        <th>Age</th><th>Yrs</th><th class="pr-3">Salary</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each proSkaters as p (p.id)}
-        {@const attrs = parseAttrs(p.attrs)}
-        <tr class="{p.is_scratch ? 'opacity-40' : ''} {p.injured_games_remaining > 0 ? 'bg-rwha-red/5' : ''}">
-          <!-- Scratch toggle -->
-          <td class="pl-3 sticky left-0 bg-rwha-surface">
-            <form method="POST" action="?/scratch" use:enhance>
-              <input type="hidden" name="playerId" value={p.id} />
-              <input type="hidden" name="scratch"  value={p.is_scratch ? '0' : '1'} />
-              <button
-                type="submit"
-                title="{p.is_scratch ? 'Un-scratch' : 'Scratch'}"
-                class="w-5 h-5 rounded border flex items-center justify-center transition-colors
-                       {p.is_scratch
-                         ? 'border-rwha-amber bg-rwha-amber/20 text-rwha-amber'
-                         : 'border-rwha-border/60 text-rwha-muted hover:border-rwha-amber/50'}"
-              >{#if p.is_scratch}<span class="text-xs leading-none">✕</span>{/if}</button>
-            </form>
-          </td>
-          <!-- Name -->
-          <td class="text-left pl-2 sticky left-8 bg-rwha-surface font-semibold
-                     {p.is_scratch ? 'line-through text-rwha-muted' : 'text-rwha-text'}">
-            {p.name}
-            {#if p.injured_games_remaining > 0}
-              <span class="text-rwha-red ml-1 font-normal not-italic">(INJ)</span>
-            {/if}
-          </td>
-          <td class="text-rwha-amber font-bold">{x(p.position, 'C')}</td>
-          <td class="text-rwha-amber font-bold">{x(p.position, 'L')}</td>
-          <td class="text-rwha-amber font-bold">{x(p.position, 'R')}</td>
-          <td class="text-rwha-amber font-bold">{x(p.position, 'D')}</td>
-          <td class="text-rwha-muted">{fmtCon(p.injured_games_remaining)}</td>
-          <td class="{p.injured_games_remaining > 0 ? 'text-rwha-red font-bold' : 'text-rwha-muted'}">
-            {p.injured_games_remaining > 0 ? p.injured_games_remaining : ''}
-          </td>
-          {#each SKATER_COLS as col}
-            <td class="{attrClass(attrs[col])}">{a(attrs, col)}</td>
-          {/each}
-          <td class="text-rwha-amber font-bold">{p.ov}</td>
-          <td class="text-rwha-muted">{p.age ?? '—'}</td>
-          <td class="text-rwha-muted">{p.contract_yrs ?? '—'}</td>
-          <td class="pr-3 text-rwha-muted">{fmtSal(p.salary)}</td>
-        </tr>
-      {/each}
-    </tbody>
-  </table>
-</div>
-
-<!-- ── Pro Goalies ─────────────────────────────────────────────────────────── -->
-{#if proGoalies.length > 0}
-  <div class="card mb-5 overflow-x-auto">
-    <table class="stat-table text-xs whitespace-nowrap">
-      <thead>
-        <tr class="border-b border-rwha-border">
-          <th class="pl-3 w-8 sticky left-0 bg-rwha-surface">SCR</th>
-          <th class="text-left pl-2 sticky left-8 bg-rwha-surface min-w-[150px]">Goalie</th>
-          <th>PO</th><th>CON</th><th>IJ</th>
-          {#each GOALIE_COLS as col}<th class="uppercase">{col}</th>{/each}
-          <th class="text-rwha-amber">OV</th>
-          <th>Age</th><th>Yrs</th><th class="pr-3">Salary</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each proGoalies as p (p.id)}
-          {@const attrs = parseAttrs(p.attrs)}
-          <tr class="{p.is_scratch ? 'opacity-40' : ''} {p.injured_games_remaining > 0 ? 'bg-rwha-red/5' : ''}">
-            <td class="pl-3 sticky left-0 bg-rwha-surface">
-              <form method="POST" action="?/scratch" use:enhance>
-                <input type="hidden" name="playerId" value={p.id} />
-                <input type="hidden" name="scratch"  value={p.is_scratch ? '0' : '1'} />
-                <button type="submit" title="{p.is_scratch ? 'Un-scratch' : 'Scratch'}"
-                  class="w-5 h-5 rounded border flex items-center justify-center transition-colors
-                         {p.is_scratch ? 'border-rwha-amber bg-rwha-amber/20 text-rwha-amber' : 'border-rwha-border/60 text-rwha-muted hover:border-rwha-amber/50'}"
-                >{#if p.is_scratch}<span class="text-xs leading-none">✕</span>{/if}</button>
-              </form>
-            </td>
-            <td class="text-left pl-2 sticky left-8 bg-rwha-surface font-semibold
-                       {p.is_scratch ? 'line-through text-rwha-muted' : 'text-rwha-text'}">
-              {p.name}
-              {#if p.injured_games_remaining > 0}<span class="text-rwha-red ml-1 font-normal">(INJ)</span>{/if}
-            </td>
-            <td class="text-rwha-muted">G</td>
-            <td class="text-rwha-muted">{fmtCon(p.injured_games_remaining)}</td>
-            <td class="{p.injured_games_remaining > 0 ? 'text-rwha-red font-bold' : 'text-rwha-muted'}">
-              {p.injured_games_remaining > 0 ? p.injured_games_remaining : ''}
-            </td>
-            {#each GOALIE_COLS as col}
-              <td class="{attrClass(attrs[col])}">{a(attrs, col)}</td>
-            {/each}
-            <td class="text-rwha-amber font-bold">{p.ov}</td>
-            <td class="text-rwha-muted">{p.age ?? '—'}</td>
-            <td class="text-rwha-muted">{p.contract_yrs ?? '—'}</td>
-            <td class="pr-3 text-rwha-muted">{fmtSal(p.salary)}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+  <!-- Status -->
+  <div class="flex items-center gap-3 flex-wrap">
+    <span class="font-mono text-xs font-semibold {rosterOk ? 'text-rwha-green' : 'text-rwha-red'}">
+      {rosterOk ? '✓ Roster is complete' : '✗ Roster incomplete'}
+    </span>
+    <span class="text-rwha-muted font-mono text-xs">
+      {proSkaters} skaters · {proGoalies} goalies in Pro Dress
+    </span>
   </div>
-{/if}
 
-<!-- ── Farm Roster ─────────────────────────────────────────────────────────── -->
-{#if farmSkaters.length > 0 || farmGoalies.length > 0}
-  <details>
-    <summary class="section-header cursor-pointer select-none hover:text-rwha-amber/80 transition-colors mb-2">
-      Farm Roster ▸
-    </summary>
-
-    <div class="card mb-3 overflow-x-auto">
-      <table class="stat-table text-xs whitespace-nowrap">
-        <thead>
-          <tr class="border-b border-rwha-border">
-            <th class="text-left pl-3 sticky left-0 bg-rwha-surface w-6">#</th>
-            <th class="text-left pl-2 sticky left-6 bg-rwha-surface min-w-[150px]">Player</th>
-            <th class="w-5">C</th><th class="w-5">L</th><th class="w-5">R</th><th class="w-5">D</th>
-            <th>CON</th><th>IJ</th>
-            {#each SKATER_COLS as col}<th class="uppercase">{col}</th>{/each}
-            <th class="text-rwha-amber">OV</th>
-            <th>Age</th><th>Yrs</th><th class="pr-3">Salary</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each farmSkaters as p, i (p.id)}
-            {@const attrs = parseAttrs(p.attrs)}
-            <tr>
-              <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{i + 1}</td>
-              <td class="text-left pl-2 sticky left-6 bg-rwha-surface text-rwha-muted">{p.name}</td>
-              <td class="text-rwha-muted">{x(p.position, 'C')}</td>
-              <td class="text-rwha-muted">{x(p.position, 'L')}</td>
-              <td class="text-rwha-muted">{x(p.position, 'R')}</td>
-              <td class="text-rwha-muted">{x(p.position, 'D')}</td>
-              <td class="text-rwha-muted">{fmtCon(p.injured_games_remaining)}</td>
-              <td class="text-rwha-muted">{p.injured_games_remaining > 0 ? p.injured_games_remaining : ''}</td>
-              {#each SKATER_COLS as col}
-                <td class="text-rwha-muted/70">{a(attrs, col)}</td>
-              {/each}
-              <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
-              <td class="text-rwha-muted">{p.age ?? '—'}</td>
-              <td class="text-rwha-muted">{p.contract_yrs ?? '—'}</td>
-              <td class="pr-3 text-rwha-muted">{fmtSal(p.salary)}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-
-    {#if farmGoalies.length > 0}
-      <div class="card mb-3 overflow-x-auto">
-        <table class="stat-table text-xs whitespace-nowrap">
-          <thead>
-            <tr class="border-b border-rwha-border">
-              <th class="pl-3 w-6 sticky left-0 bg-rwha-surface">PO</th>
-              <th class="text-left pl-2 sticky left-6 bg-rwha-surface min-w-[150px]">Goalie</th>
-              <th>CON</th><th>IJ</th>
-              {#each GOALIE_COLS as col}<th class="uppercase">{col}</th>{/each}
-              <th class="text-rwha-amber">OV</th>
-              <th>Age</th><th>Yrs</th><th class="pr-3">Salary</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each farmGoalies as p (p.id)}
-              {@const attrs = parseAttrs(p.attrs)}
-              <tr>
-                <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">G</td>
-                <td class="text-left pl-2 sticky left-6 bg-rwha-surface text-rwha-muted">{p.name}</td>
-                <td class="text-rwha-muted">{fmtCon(p.injured_games_remaining)}</td>
-                <td class="text-rwha-muted">{p.injured_games_remaining > 0 ? p.injured_games_remaining : ''}</td>
-                {#each GOALIE_COLS as col}
-                  <td class="text-rwha-muted/70">{a(attrs, col)}</td>
-                {/each}
-                <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
-                <td class="text-rwha-muted">{p.age ?? '—'}</td>
-                <td class="text-rwha-muted">{p.contract_yrs ?? '—'}</td>
-                <td class="pr-3 text-rwha-muted">{fmtSal(p.salary)}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+  <!-- Save feedback + button -->
+  <div class="flex items-center gap-3">
+    {#if form?.ok}
+      <span class="font-mono text-xs text-rwha-green">Saved ✓</span>
     {/if}
-  </details>
-{/if}
+    {#if form?.error}
+      <span class="font-mono text-xs text-rwha-red">{form.error}</span>
+    {/if}
+
+    <form method="POST" action="?/saveRoster" use:enhance>
+      <input type="hidden" name="moves" value={movesJson} />
+      <button
+        type="submit"
+        disabled={dirty.length === 0}
+        class="px-4 py-1.5 rounded font-mono font-bold text-xs uppercase tracking-widest transition-all
+               {dirty.length > 0
+                 ? 'bg-rwha-amber text-rwha-bg hover:brightness-110 active:scale-95 cursor-pointer'
+                 : 'bg-rwha-surface border border-rwha-border text-rwha-muted cursor-not-allowed'}"
+      >Save Roster{dirty.length > 0 ? ` (${dirty.length})` : ''}</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── 4-column board ─────────────────────────────────────────────────────────── -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+  {#each Object.keys(COL_META) as colStr (colStr)}
+    {@const col  = colStr as Column}
+    {@const meta = COL_META[col]}
+    {@const cards = cols[col]}
+    {@const isTarget = dropTarget === col}
+
+    <!-- Drop zone column -->
+    <div
+      class="rounded border transition-colors duration-100 flex flex-col min-h-[240px]
+             {isTarget
+               ? 'border-rwha-amber bg-rwha-amber/5'
+               : 'border-rwha-border bg-rwha-surface'}"
+      on:dragover={e => onDragOver(e, col)}
+      on:drop={e => onDrop(e, col)}
+      on:dragleave={() => { if (dropTarget === col) dropTarget = null; }}
+      role="list"
+      aria-label="{meta.label}"
+    >
+      <!-- Column header -->
+      <div class="px-3 py-2 border-b border-rwha-border flex items-center justify-between shrink-0">
+        <span class="font-mono font-bold text-xs uppercase tracking-wider {meta.headerClass}">
+          {meta.label}
+        </span>
+        <span class="font-mono text-xs text-rwha-muted">{cards.length}</span>
+      </div>
+
+      <!-- Cards list -->
+      <div class="p-2 flex flex-col gap-1 flex-1">
+        {#each cards as card (card.id)}
+          <!-- Player card -->
+          <div
+            draggable="true"
+            on:dragstart={e => startDrag(e, card.id, col)}
+            on:dragend={onDragEnd}
+            role="listitem"
+            title="Drag to move {card.name}"
+            class="px-2.5 py-1.5 rounded border cursor-grab active:cursor-grabbing select-none
+                   transition-opacity duration-150
+                   {dragId === card.id ? 'opacity-25' : 'opacity-100'}
+                   {card.injured_games_remaining > 0
+                     ? 'border-rwha-red/50 bg-rwha-red/5'
+                     : 'border-rwha-border/60 bg-rwha-bg hover:border-rwha-border'}"
+          >
+            <div class="flex items-center justify-between gap-1.5">
+              <!-- Name -->
+              <span class="font-mono text-xs font-semibold text-rwha-text leading-tight truncate">
+                {#if card.injured_games_remaining > 0}
+                  <span class="text-rwha-red">⚠</span>{' '}
+                {/if}
+                {card.name}
+              </span>
+              <!-- OV -->
+              <span class="font-mono text-xs font-bold text-rwha-amber shrink-0">{card.ov}</span>
+            </div>
+            <!-- Position + injury games -->
+            <div class="font-mono text-[10px] text-rwha-muted mt-0.5 leading-tight">
+              {card.is_goalie ? 'G' : card.position.replace(/\//g, ',')}
+              {#if card.injured_games_remaining > 0}
+                <span class="text-rwha-red ml-1">INJ·{card.injured_games_remaining}g</span>
+              {/if}
+            </div>
+          </div>
+        {/each}
+
+        <!-- Empty drop target hint -->
+        {#if cards.length === 0}
+          <div class="flex-1 flex items-center justify-center">
+            <span class="font-mono text-xs text-rwha-muted/30 select-none">drop here</span>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/each}
+</div>
+
+<!-- ── Legend ─────────────────────────────────────────────────────────────────── -->
+<div class="mt-4 text-rwha-muted font-mono text-xs flex gap-4 flex-wrap">
+  <span>Drag players between columns to move them.</span>
+  <span class="text-rwha-amber">●</span><span>Pro Dress = active roster</span>
+  <span class="text-rwha-red">●</span><span>Pro Scratch = healthy scratch</span>
+  <span>Farm columns = AHL roster</span>
+</div>
