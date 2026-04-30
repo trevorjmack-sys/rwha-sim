@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
   import { onMount } from 'svelte';
   import type { PageData, ActionData } from './$types';
 
@@ -264,7 +265,7 @@
     {#if form?.error}
       <span class="font-mono text-xs text-rwha-red">{form.error}</span>
     {/if}
-    <form method="POST" action="?/saveRoster" use:enhance>
+    <form method="POST" action="?/saveRoster" use:enhance={() => async ({ update }) => { await update(); await invalidateAll(); }}>
       <input type="hidden" name="moves" value={movesJson} />
       <button
         type="submit"

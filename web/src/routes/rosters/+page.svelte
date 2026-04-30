@@ -85,7 +85,7 @@
         </thead>
         <tbody>
           {#each team.proSkaters as p, i}
-            <tr class="{p.is_scratch ? 'opacity-40' : ''} {p.injured_games_remaining > 0 ? 'bg-rwha-red/5' : ''}">
+            <tr class="{p.injured_games_remaining > 0 ? 'bg-rwha-red/5' : ''}">
               <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{i + 1}</td>
               <td class="text-left pl-2 sticky left-6 bg-rwha-surface font-semibold text-rwha-text">
                 {p.name}
