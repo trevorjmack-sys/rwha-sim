@@ -97,12 +97,12 @@
   type PosFilter = typeof POS_FILTERS[number];
   let posFilter: PosFilter = 'All';
 
-  function matchesFilter(card: Card): boolean {
-    if (posFilter === 'All') return true;
-    if (posFilter === 'G')   return card.is_goalie;
-    if (card.is_goalie)      return false;
+  function matchesFilter(card: Card, filter: PosFilter): boolean {
+    if (filter === 'All') return true;
+    if (filter === 'G')   return card.is_goalie;
+    if (card.is_goalie)   return false;
     const parts = card.position.split('/');
-    switch (posFilter) {
+    switch (filter) {
       case 'C':  return parts.some(p => p === 'C');
       case 'LW': return parts.some(p => p === 'L' || p === 'LW');
       case 'RW': return parts.some(p => p === 'R' || p === 'RW');
@@ -334,7 +334,7 @@
             title="Drag to move {card.name}"
             class="px-2.5 py-1.5 rounded border cursor-grab active:cursor-grabbing select-none
                    transition-all duration-150 touch-none
-                   {!matchesFilter(card) ? 'hidden' : ''}
+                   {!matchesFilter(card, posFilter) ? 'hidden' : ''}
                    {dragId === card.id ? 'opacity-25' : 'opacity-100'}
                    {card.injured_games_remaining > 0
                      ? 'border-rwha-red/50 bg-rwha-red/5'
