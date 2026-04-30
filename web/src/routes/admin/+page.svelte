@@ -32,8 +32,13 @@
   let showNextWeek    = false;              // show reload prompt when week is done
 
   // ── Run entire season ──────────────────────────────────────────────────────
-  let seasonRunning   = false;
-  let seasonDone      = 0;   // games completed so far during bulk run
+  let seasonRunning    = false;
+  let seasonDone       = 0;
+  let confirmRunSeason = false;   // shows inline confirm prompt
+
+  // ── Reset season ───────────────────────────────────────────────────────────
+  let showResetModal   = false;
+  let resetBusy        = false;
 
   // ── Run games ──────────────────────────────────────────────────────────────
   async function runGames(count: number) {
@@ -119,10 +124,11 @@
   }
 
   async function runSeason() {
-    seasonRunning = true;
-    seasonDone    = 0;
-    message       = '';
-    showNextWeek  = false;
+    confirmRunSeason = false;
+    seasonRunning    = true;
+    seasonDone       = 0;
+    message          = '';
+    showNextWeek     = false;
 
     try {
       while (true) {
@@ -143,15 +149,30 @@
           message?: string;
         };
 
-        if (msg || games.length === 0) break;   // season complete
+        if (msg || games.length === 0) break;
 
-        seasonDone   += games.length;
-        playedCount  += games.length;
+        seasonDone  += games.length;
+        playedCount += games.length;
       }
     } finally {
       seasonRunning = false;
-      // Reload so the game cards reflect the finished state
       window.location.reload();
+    }
+  }
+
+  async function resetSeason() {
+    resetBusy = true;
+    try {
+      const res = await fetch('/api/admin/reset-season', { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json() as { message?: string };
+        message = err.message ?? `Reset failed (${res.status})`;
+        showResetModal = false;
+        return;
+      }
+      window.location.reload();
+    } finally {
+      resetBusy = false;
     }
   }
 
@@ -240,20 +261,46 @@
       {running ? '⏳ Simulating…' : '▶ Run Games'}
     </button>
 
+    <!-- Run Season: idle → confirm prompt → running -->
+    {#if confirmRunSeason}
+      <div class="flex items-center gap-2 bg-rwha-surface border border-rwha-amber/40 rounded px-3 py-1.5">
+        <span class="font-mono text-xs text-rwha-amber">Run all {remaining} games?</span>
+        <button
+          class="font-mono text-xs font-bold text-rwha-bg bg-rwha-amber px-2.5 py-1 rounded
+                 hover:brightness-110 active:scale-95 transition-all"
+          on:click={runSeason}
+        >Yes</button>
+        <button
+          class="font-mono text-xs text-rwha-muted hover:text-rwha-text transition-colors"
+          on:click={() => confirmRunSeason = false}
+        >Cancel</button>
+      </div>
+    {:else}
+      <button
+        class="px-5 py-2 rounded font-mono font-bold text-sm uppercase tracking-widest transition-all border
+               {seasonRunning || running || remaining === 0
+                 ? 'border-rwha-border text-rwha-muted cursor-not-allowed'
+                 : 'border-rwha-amber/50 text-rwha-amber hover:bg-rwha-amber/10 active:scale-95'}"
+        disabled={seasonRunning || running || remaining === 0}
+        on:click={() => confirmRunSeason = true}
+      >
+        {#if seasonRunning}
+          ⏳ {seasonDone} games…
+        {:else}
+          ▶▶ Run Season
+        {/if}
+      </button>
+    {/if}
+
+    <!-- Reset -->
     <button
-      class="px-5 py-2 rounded font-mono font-bold text-sm uppercase tracking-widest transition-all border
-             {seasonRunning || running || remaining === 0
+      class="px-4 py-2 rounded font-mono font-bold text-sm uppercase tracking-widest transition-all border
+             {running || seasonRunning
                ? 'border-rwha-border text-rwha-muted cursor-not-allowed'
-               : 'border-rwha-red/60 text-rwha-red hover:bg-rwha-red/10 active:scale-95'}"
-      disabled={seasonRunning || running || remaining === 0}
-      on:click={runSeason}
-    >
-      {#if seasonRunning}
-        ⏳ {seasonDone} games…
-      {:else}
-        ▶▶ Run Season
-      {/if}
-    </button>
+               : 'border-rwha-red/40 text-rwha-red/70 hover:border-rwha-red hover:text-rwha-red hover:bg-rwha-red/5 active:scale-95'}"
+      disabled={running || seasonRunning}
+      on:click={() => showResetModal = true}
+    >↺ Reset</button>
   </div>
 </div>
 
@@ -384,6 +431,44 @@
 {#if cards.length === 0}
   <div class="card p-8 text-center text-rwha-muted font-mono text-sm">
     All games in this week are complete.
+  </div>
+{/if}
+
+<!-- ── Reset season modal ────────────────────────────────────────────────── -->
+{#if showResetModal}
+  <!-- Backdrop -->
+  <div class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4">
+    <div class="bg-rwha-surface border border-rwha-red/40 rounded-lg shadow-2xl max-w-sm w-full p-6">
+      <h2 class="font-mono font-bold text-rwha-red text-base uppercase tracking-wider mb-2">
+        ⚠ Reset Season
+      </h2>
+      <p class="font-mono text-sm text-rwha-text mb-1">
+        This will permanently delete:
+      </p>
+      <ul class="font-mono text-xs text-rwha-muted mb-4 space-y-0.5 list-disc list-inside">
+        <li>All game results and box scores</li>
+        <li>All player game stats</li>
+        <li>All injury / suspension records</li>
+      </ul>
+      <p class="font-mono text-xs text-rwha-muted mb-5">
+        The schedule, rosters, lines, and players are kept. You can re-run the full season immediately after.
+      </p>
+      <div class="flex gap-3 justify-end">
+        <button
+          class="px-4 py-2 rounded font-mono text-sm text-rwha-muted border border-rwha-border
+                 hover:border-rwha-amber/50 hover:text-rwha-text transition-colors"
+          disabled={resetBusy}
+          on:click={() => showResetModal = false}
+        >Cancel</button>
+        <button
+          class="px-5 py-2 rounded font-mono font-bold text-sm uppercase tracking-widest
+                 bg-rwha-red/80 text-white hover:bg-rwha-red active:scale-95 transition-all
+                 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={resetBusy}
+          on:click={resetSeason}
+        >{resetBusy ? 'Resetting…' : 'Yes, Reset Season'}</button>
+      </div>
+    </div>
   </div>
 {/if}
 
