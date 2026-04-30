@@ -28,16 +28,8 @@
 
   $: teamsActive = $page.url.pathname.startsWith('/teams');
 
-  // Close desktop dropdown when clicking outside
-  function handleOutsideClick(e: MouseEvent) {
-    if (teamsOpen) {
-      const target = e.target as HTMLElement;
-      if (!target.closest('[data-teams-menu]')) teamsOpen = false;
-    }
-  }
+  $: teamNames = data.teamNames ?? [];
 </script>
-
-<svelte:window on:click={handleOutsideClick} />
 
 <div class="min-h-screen flex flex-col">
   <!-- ── Header ──────────────────────────────────────────────────────────────── -->
@@ -62,30 +54,34 @@
         {/each}
 
         <!-- Teams dropdown -->
-        <div class="relative shrink-0" data-teams-menu>
+        <div class="relative shrink-0">
           <button
             class="nav-link flex items-center gap-1"
             class:active={teamsActive}
-            on:click|stopPropagation={() => teamsOpen = !teamsOpen}
+            on:click={() => teamsOpen = !teamsOpen}
           >
             Teams
-            <span class="text-[10px] opacity-60 transition-transform duration-150
-                         {teamsOpen ? 'rotate-180' : ''}">▾</span>
+            <span class="text-[10px] opacity-60 ml-0.5">{teamsOpen ? '▴' : '▾'}</span>
           </button>
 
           {#if teamsOpen}
+            <!-- Invisible backdrop — clicking it closes the dropdown -->
+            <button
+              class="fixed inset-0 z-40 cursor-default"
+              tabindex="-1"
+              aria-hidden="true"
+              on:click={() => teamsOpen = false}
+            />
+            <!-- Dropdown panel -->
             <div class="absolute top-full left-0 mt-1 z-50 bg-rwha-surface border border-rwha-border
-                        rounded shadow-xl py-1 min-w-[200px]"
-                 data-teams-menu>
-              <!-- Stats page link -->
+                        rounded shadow-xl py-1 min-w-[200px]">
               <a href="/teams"
                  class="block px-3 py-1.5 font-mono text-xs text-rwha-muted hover:text-rwha-amber
                         hover:bg-rwha-amber/5 transition-colors border-b border-rwha-border/40 mb-1">
                 Team Stats ↗
               </a>
-              <!-- 22 teams in 2-column grid -->
               <div class="grid grid-cols-2">
-                {#each data.teamNames as name}
+                {#each teamNames as name}
                   <a href="/teams/{name.toLowerCase()}"
                      class="px-3 py-1 font-mono text-xs transition-colors
                             {$page.url.pathname === `/teams/${name.toLowerCase()}`
@@ -158,7 +154,7 @@
                  class="col-span-3 py-1.5 font-mono text-xs text-rwha-muted hover:text-rwha-amber transition-colors">
                 Team Stats ↗
               </a>
-              {#each data.teamNames as name}
+              {#each teamNames as name}
                 <a href="/teams/{name.toLowerCase()}"
                    class="py-1.5 font-mono text-xs transition-colors truncate
                           {$page.url.pathname === `/teams/${name.toLowerCase()}`
