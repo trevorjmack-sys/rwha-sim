@@ -19,7 +19,7 @@
     const bv = Number((b as Record<string, unknown>)[skSort] ?? 0);
     // Secondary: PTS desc
     if (av === bv && skSort !== 'pts') return Number(b.pts ?? 0) - Number(a.pts ?? 0);
-    return skDir * (bv - av);
+    return skDir * (av - bv);
   });
 
   // ── Goalie sort ───────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@
     const av = Number((a as Record<string, unknown>)[glSort] ?? 0);
     const bv = Number((b as Record<string, unknown>)[glSort] ?? 0);
     if (av === bv && glSort !== 'sv_pct') return Number(b.sv_pct ?? 0) - Number(a.sv_pct ?? 0);
-    return glDir * (bv - av);
+    return glDir * (av - bv);
   });
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
