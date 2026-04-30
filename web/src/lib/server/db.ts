@@ -207,6 +207,120 @@ export async function getScoringLeaders(db: D1Database, seasonId: number, limit 
   return results;
 }
 
+/** All weeks that have at least one completed game. */
+export async function getPlayedWeeks(db: D1Database, seasonId: number): Promise<number[]> {
+  const { results } = await db.prepare(`
+    SELECT DISTINCT week FROM scheduled_games
+    WHERE season_id = ? AND status = 'complete'
+    ORDER BY week
+  `).bind(seasonId).all<{ week: number }>();
+  return results.map(r => r.week);
+}
+
+/** Games for a week, with results joined where available. */
+export interface WeekResultRow {
+  id: number;
+  week: number;
+  home_name: string;
+  away_name: string;
+  status: string;
+  home_goals: number | null;
+  away_goals: number | null;
+  final_label: string | null;
+  home_sog: number | null;
+  away_sog: number | null;
+}
+
+export async function getWeekResults(
+  db: D1Database,
+  seasonId: number,
+  week: number,
+): Promise<WeekResultRow[]> {
+  const { results } = await db.prepare(`
+    SELECT
+      sg.id, sg.week,
+      h.name AS home_name, a.name AS away_name,
+      sg.status,
+      r.home_goals, r.away_goals, r.final_label,
+      r.home_sog, r.away_sog
+    FROM scheduled_games sg
+    JOIN teams h ON h.id = sg.home_team_id
+    JOIN teams a ON a.id = sg.away_team_id
+    LEFT JOIN game_results r ON r.game_id = sg.id
+    WHERE sg.season_id = ? AND sg.week = ?
+    ORDER BY sg.id
+  `).bind(seasonId, week).all<WeekResultRow>();
+  return results;
+}
+
+/** Single game with team names + result (for box score page). */
+export interface GameDetailRow {
+  id: number;
+  week: number;
+  home_team_id: number;
+  away_team_id: number;
+  home_name: string;
+  away_name: string;
+  status: string;
+  home_goals: number | null;
+  away_goals: number | null;
+  final_label: string | null;
+  home_sog: number | null;
+  away_sog: number | null;
+  box_score_json: string | null;
+  sim_seed: number | null;
+  simulated_at: string | null;
+}
+
+export async function getGameDetail(
+  db: D1Database,
+  gameId: number,
+): Promise<GameDetailRow | null> {
+  return db.prepare(`
+    SELECT
+      sg.id, sg.week, sg.home_team_id, sg.away_team_id,
+      h.name AS home_name, a.name AS away_name,
+      sg.status,
+      r.home_goals, r.away_goals, r.final_label,
+      r.home_sog, r.away_sog, r.box_score_json,
+      r.sim_seed, r.simulated_at
+    FROM scheduled_games sg
+    JOIN teams h ON h.id = sg.home_team_id
+    JOIN teams a ON a.id = sg.away_team_id
+    LEFT JOIN game_results r ON r.game_id = sg.id
+    WHERE sg.id = ?
+  `).bind(gameId).first<GameDetailRow>();
+}
+
+/** Toggle scratch status for a player (must belong to teamId). */
+export async function updateScratch(
+  db: D1Database,
+  playerId: number,
+  teamId: number,
+  scratch: boolean,
+): Promise<void> {
+  await db.prepare(`
+    UPDATE players SET is_scratch = ? WHERE id = ? AND team_id = ?
+  `).bind(scratch ? 1 : 0, playerId, teamId).run();
+}
+
+/** Upsert team lines config. */
+export async function updateTeamLines(
+  db: D1Database,
+  teamId: number,
+  useComputer: boolean,
+  linesJson: string | null,
+): Promise<void> {
+  await db.prepare(`
+    INSERT INTO team_lines (team_id, use_computer_lines, lines_json, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(team_id) DO UPDATE SET
+      use_computer_lines = excluded.use_computer_lines,
+      lines_json         = excluded.lines_json,
+      updated_at         = excluded.updated_at
+  `).bind(teamId, useComputer ? 1 : 0, linesJson).run();
+}
+
 /** Goalie leaders: top N goalies by SV%, minimum 10 GP. */
 export async function getGoalieLeaders(db: D1Database, seasonId: number, limit = 20) {
   const { results } = await db.prepare(`

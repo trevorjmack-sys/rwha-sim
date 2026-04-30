@@ -11,4 +11,4 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 [[d1_databases]]
 binding     = "DB"
 database_name = "rwha-sim"
-database_id   = "placeholder"   # replace after: wrangler d1 create rwha-sim
+database_id   = "e0c6f03c-9c6a-4c96-976a-a7befebec224"
