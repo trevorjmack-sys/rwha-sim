@@ -25,14 +25,17 @@
     goalsRevealed: 0,
   }));
 
-  let running    = false;
-  let batchCount = 1;
-  let message    = '';
+  let running         = false;
+  let batchCount      = 1;
+  let message         = '';
+  let playedCount     = data.playedGames;   // updated locally after each batch
+  let showNextWeek    = false;              // show reload prompt when week is done
 
   // ── Run games ──────────────────────────────────────────────────────────────
   async function runGames(count: number) {
-    running = true;
-    message = '';
+    running      = true;
+    showNextWeek = false;
+    message      = '';
 
     try {
       const res = await fetch('/api/admin/run', {
@@ -54,11 +57,12 @@
 
       if (msg) { message = msg; return; }
 
-      // Update cards with results — but reveal dramatically
+      playedCount += games.length;
+
+      // Update cards with results — reveal dramatically, one game at a time
       for (const result of games) {
         const card = cards.find(c => c.gameId === result.gameId);
         if (!card) {
-          // Game wasn't in the current view — add it
           cards = [...cards, {
             gameId: result.gameId, homeTeam: result.homeTeam, awayTeam: result.awayTeam,
             status: 'revealing', homeGoals: result.homeGoals, awayGoals: result.awayGoals,
@@ -77,28 +81,29 @@
           cards = [...cards];
         }
 
-        // Wait 800ms then flip the score
-        await delay(800);
+        // Build anticipation, then flip the score
+        await delay(1400);
         const updCard = cards.find(c => c.gameId === result.gameId)!;
         updCard.status = 'revealed';
         cards = [...cards];
 
         // Reveal goals one by one
-        await delay(400);
+        await delay(600);
         const goals = updCard.goals ?? [];
         for (let i = 0; i < goals.length; i++) {
-          await delay(260);
+          await delay(380);
           updCard.goalsRevealed = i + 1;
           cards = [...cards];
         }
 
-        // Small gap before next game card flips
-        await delay(600);
+        // Pause before next game
+        await delay(1000);
       }
 
-      // Refresh the page data so the weekly game list updates
-      // (Using a lightweight invalidation rather than full reload)
-      window.location.reload();
+      // If no scheduled games remain, prompt to load next week
+      if (cards.every(c => c.status === 'revealed' || c.status === 'complete')) {
+        showNextWeek = true;
+      }
 
     } finally {
       running = false;
@@ -121,8 +126,8 @@
     return p === 1 ? '1st' : p === 2 ? '2nd' : p === 3 ? '3rd' : 'OT';
   }
 
-  const remaining = data.totalGames - data.playedGames;
-  const scheduledCards = cards.filter(c => c.status === 'scheduled');
+  $: remaining      = data.totalGames - playedCount;
+  $: scheduledCards = cards.filter(c => c.status === 'scheduled');
 </script>
 
 <svelte:head><title>Admin — RWHA Sim</title></svelte:head>
@@ -134,7 +139,7 @@
       ⚡ Commissioner
     </h1>
     <p class="text-rwha-muted text-sm mt-0.5 font-mono">
-      Week {data.currentWeek} · {data.playedGames}/{data.totalGames} games played · {remaining} remaining
+      Week {data.currentWeek} · {playedCount}/{data.totalGames} games played · {remaining} remaining
     </p>
   </div>
 
@@ -173,16 +178,27 @@
   </div>
 {/if}
 
+{#if showNextWeek}
+  <div class="mb-4 p-3 rounded border border-rwha-green/40 bg-rwha-green/10 flex items-center justify-between">
+    <span class="text-rwha-green font-mono text-sm">Week {data.currentWeek} complete.</span>
+    <button
+      class="px-4 py-1.5 rounded font-mono font-bold text-xs uppercase tracking-widest
+             bg-rwha-green/20 text-rwha-green border border-rwha-green/40 hover:bg-rwha-green/30 transition-colors"
+      on:click={() => window.location.reload()}
+    >Load Week {data.currentWeek + 1} →</button>
+  </div>
+{/if}
+
 <!-- ── Progress bar ───────────────────────────────────────────────────────── -->
 <div class="mb-6">
   <div class="h-1 rounded-full bg-rwha-border overflow-hidden">
     <div
       class="h-full bg-rwha-amber rounded-full transition-all duration-500"
-      style="width: {(data.playedGames / data.totalGames * 100).toFixed(1)}%"
+      style="width: {(playedCount / data.totalGames * 100).toFixed(1)}%"
     ></div>
   </div>
   <p class="text-rwha-muted text-xs font-mono mt-1 text-right">
-    Season {((data.playedGames / data.totalGames) * 100).toFixed(0)}% complete
+    Season {((playedCount / data.totalGames) * 100).toFixed(0)}% complete
   </p>
 </div>
 

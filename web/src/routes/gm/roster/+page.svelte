@@ -4,9 +4,20 @@
   export let data: PageData;
 
   // ── Derived groups ─────────────────────────────────────────────────────────
-  $: forwards  = data.players.filter(p => !p.is_goalie && ['LW','C','RW'].includes(p.position));
-  $: defense   = data.players.filter(p => !p.is_goalie && ['LD','RD'].includes(p.position));
+  // Positions in DB are STHS multi-value strings: C/L, C/R, L/R, D, LD, RD, G etc.
+  function isDefense(pos: string)  { return /^[LR]?D$/.test(pos) || pos === 'D'; }
+  function isForward(pos: string)  { return !isDefense(pos); }
+
+  $: forwards  = data.players.filter(p => !p.is_goalie && isForward(p.position));
+  $: defense   = data.players.filter(p => !p.is_goalie && isDefense(p.position));
   $: goalies   = data.players.filter(p => !!p.is_goalie);
+
+  // ── Attrs ──────────────────────────────────────────────────────────────────
+  function parseAttrs(json: string): Record<string, number> {
+    try { return JSON.parse(json); } catch { return {}; }
+  }
+  const SKATER_ATTRS = ['sk','sc','pa','fo','df','ck'];
+  const GOALIE_ATTRS = ['sk','sz','rb','rt','sc','du'];
   $: proPlayers  = data.players.filter(p => p.roster_level === 'pro');
   $: farmPlayers = data.players.filter(p => p.roster_level === 'farm');
 
@@ -63,10 +74,25 @@
           <!-- Position badge -->
           <span class="text-xs font-mono text-rwha-muted w-7 shrink-0">{p.position}</span>
 
-          <!-- Name -->
-          <span class="font-semibold text-sm flex-1 {p.is_scratch ? 'line-through text-rwha-muted' : 'text-rwha-text'}">
-            {p.name}
-          </span>
+          <!-- Name + attrs -->
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm {p.is_scratch ? 'line-through text-rwha-muted' : 'text-rwha-text'}">
+              {p.name}
+            </div>
+            {#if !p.is_scratch}
+              {@const attrs = parseAttrs(p.attrs)}
+              {@const keys  = p.is_goalie ? GOALIE_ATTRS : SKATER_ATTRS}
+              <div class="flex gap-2 mt-0.5">
+                {#each keys as k}
+                  {#if attrs[k] != null}
+                    <span class="font-mono text-xs text-rwha-muted">
+                      <span class="text-rwha-muted/50 uppercase">{k}</span><span class="text-rwha-text/70">{attrs[k]}</span>
+                    </span>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+          </div>
 
           <!-- OV -->
           <span class="font-mono text-sm font-bold text-rwha-amber w-8 text-right shrink-0">{p.ov}</span>

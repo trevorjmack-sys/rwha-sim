@@ -6,10 +6,13 @@
   export let form: ActionData;
 
   // ── Player pools ────────────────────────────────────────────────────────────
-  $: proPlayers    = data.players.filter(p => p.roster_level === 'pro' && !p.is_scratch);
-  $: forwards      = proPlayers.filter(p => !p.is_goalie && ['LW','C','RW'].includes(p.position));
-  $: defensemen    = proPlayers.filter(p => !p.is_goalie && ['LD','RD'].includes(p.position));
-  $: goaliePool    = proPlayers.filter(p =>  p.is_goalie);
+  // Positions in DB are STHS multi-value strings: C/L, C/R, L/R, D, LD, RD, G etc.
+  function isDefense(pos: string) { return /^[LR]?D$/.test(pos) || pos === 'D'; }
+
+  $: proPlayers = data.players.filter(p => p.roster_level === 'pro' && !p.is_scratch);
+  $: forwards   = proPlayers.filter(p => !p.is_goalie && !isDefense(p.position));
+  $: defensemen = proPlayers.filter(p => !p.is_goalie &&  isDefense(p.position));
+  $: goaliePool = proPlayers.filter(p =>  p.is_goalie);
 
   // ── Parse stored lines → initial slot values ────────────────────────────────
   type FwdKey = 'f1_lw'|'f1_c'|'f1_rw'|'f2_lw'|'f2_c'|'f2_rw'|'f3_lw'|'f3_c'|'f3_rw'|'f4_lw'|'f4_c'|'f4_rw';
