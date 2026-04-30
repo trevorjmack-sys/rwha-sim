@@ -85,40 +85,40 @@ export async function getStandings(db: D1Database, seasonId: number): Promise<St
     SELECT
       t.id   AS team_id,
       t.name AS team_name,
-      COUNT(DISTINCT sg.id)                                             AS gp,
-      SUM(CASE
+      COUNT(sg.id)                                                      AS gp,
+      COALESCE(SUM(CASE
         WHEN sg.home_team_id = t.id AND r.home_goals > r.away_goals THEN 1
         WHEN sg.away_team_id = t.id AND r.away_goals > r.home_goals THEN 1
-        ELSE 0 END)                                                     AS w,
-      SUM(CASE
+        ELSE 0 END), 0)                                                 AS w,
+      COALESCE(SUM(CASE
         WHEN r.final_label = 'FINAL' AND (
           (sg.home_team_id = t.id AND r.home_goals < r.away_goals) OR
           (sg.away_team_id = t.id AND r.away_goals < r.home_goals)
-        ) THEN 1 ELSE 0 END)                                            AS l,
-      SUM(CASE
+        ) THEN 1 ELSE 0 END), 0)                                        AS l,
+      COALESCE(SUM(CASE
         WHEN r.final_label != 'FINAL' AND (
           (sg.home_team_id = t.id AND r.home_goals < r.away_goals) OR
           (sg.away_team_id = t.id AND r.away_goals < r.home_goals)
-        ) THEN 1 ELSE 0 END)                                            AS otl,
-      SUM(CASE
+        ) THEN 1 ELSE 0 END), 0)                                        AS otl,
+      COALESCE(SUM(CASE
         WHEN sg.home_team_id = t.id AND r.home_goals > r.away_goals THEN 2
         WHEN sg.away_team_id = t.id AND r.away_goals > r.home_goals THEN 2
         WHEN r.final_label != 'FINAL' AND (
           (sg.home_team_id = t.id AND r.home_goals < r.away_goals) OR
           (sg.away_team_id = t.id AND r.away_goals < r.home_goals)
         ) THEN 1
-        ELSE 0 END)                                                     AS pts,
-      SUM(CASE
+        ELSE 0 END), 0)                                                 AS pts,
+      COALESCE(SUM(CASE
         WHEN sg.home_team_id = t.id THEN r.home_goals
-        ELSE r.away_goals END)                                          AS gf,
-      SUM(CASE
+        ELSE r.away_goals END), 0)                                      AS gf,
+      COALESCE(SUM(CASE
         WHEN sg.home_team_id = t.id THEN r.away_goals
-        ELSE r.home_goals END)                                          AS ga
+        ELSE r.home_goals END), 0)                                      AS ga
     FROM teams t
-    JOIN scheduled_games sg ON (sg.home_team_id = t.id OR sg.away_team_id = t.id)
-                             AND sg.season_id = ?
-                             AND sg.status = 'complete'
-    JOIN game_results r ON r.game_id = sg.id
+    LEFT JOIN scheduled_games sg ON (sg.home_team_id = t.id OR sg.away_team_id = t.id)
+                                 AND sg.season_id = ?
+                                 AND sg.status = 'complete'
+    LEFT JOIN game_results r ON r.game_id = sg.id
     WHERE t.season_id = ?
     GROUP BY t.id, t.name
     ORDER BY pts DESC, (gf - ga) DESC, gf DESC
