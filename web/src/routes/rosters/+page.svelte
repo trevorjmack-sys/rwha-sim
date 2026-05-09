@@ -9,10 +9,6 @@
   function x(pos: string, check: string) {
     return hasPos(pos, check) ? 'X' : '';
   }
-  function fmtSal(s: number | null) {
-    if (!s) return '—';
-    return '$' + s.toLocaleString('en-US');
-  }
   function fmtCon(inj: number) {
     return inj > 0 ? (100 - inj * 5).toFixed(2) : '100.00';
   }
@@ -88,8 +84,7 @@
             {/each}
             <th class="text-rwha-amber">OV</th>
             <th>Age</th>
-            <th>Yrs</th>
-            <th class="pr-3">Salary</th>
+            <th class="pr-3">Yrs</th>
           </tr>
         </thead>
         <tbody>
@@ -118,8 +113,7 @@
               {/each}
               <td class="text-rwha-amber font-bold">{p.ov}</td>
               <td class="text-rwha-muted">{p.age ?? '—'}</td>
-              <td class="text-rwha-muted">{p.contract_yrs ?? '—'}</td>
-              <td class="pr-3 text-rwha-muted">{fmtSal(p.salary)}</td>
+              <td class="pr-3 text-rwha-muted">{p.contract_yrs ?? '—'}</td>
             </tr>
           {/each}
         </tbody>
@@ -141,8 +135,7 @@
               {/each}
               <th class="text-rwha-amber">OV</th>
               <th>Age</th>
-              <th>Yrs</th>
-              <th class="pr-3">Salary</th>
+              <th class="pr-3">Yrs</th>
             </tr>
           </thead>
           <tbody>
@@ -167,8 +160,7 @@
                 {/each}
                 <td class="text-rwha-amber font-bold">{p.ov}</td>
                 <td class="text-rwha-muted">{p.age ?? '—'}</td>
-                <td class="text-rwha-muted">{p.contract_yrs ?? '—'}</td>
-                <td class="pr-3 text-rwha-muted">{fmtSal(p.salary)}</td>
+                <td class="pr-3 text-rwha-muted">{p.contract_yrs ?? '—'}</td>
               </tr>
             {/each}
           </tbody>
@@ -193,7 +185,7 @@
                 <th>CON</th><th>IJ</th>
                 {#each SKATER_COLS as col}<th class="uppercase">{col}</th>{/each}
                 <th class="text-rwha-amber">OV</th>
-                <th>Age</th><th>Yrs</th><th class="pr-3">Salary</th>
+                <th>Age</th><th class="pr-3">Yrs</th>
               </tr>
             </thead>
             <tbody>
@@ -215,8 +207,7 @@
                   {/each}
                   <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
                   <td class="text-rwha-muted">{p.age ?? '—'}</td>
-                  <td class="text-rwha-muted">{p.contract_yrs ?? '—'}</td>
-                  <td class="pr-3 text-rwha-muted">{fmtSal(p.salary)}</td>
+                  <td class="pr-3 text-rwha-muted">{p.contract_yrs ?? '—'}</td>
                 </tr>
               {/each}
             </tbody>
@@ -233,7 +224,7 @@
                   <th>CON</th><th>IJ</th>
                   {#each GOALIE_COLS as col}<th class="uppercase">{col}</th>{/each}
                   <th class="text-rwha-amber">OV</th>
-                  <th>Age</th><th>Yrs</th><th class="pr-3">Salary</th>
+                  <th>Age</th><th class="pr-3">Yrs</th>
                 </tr>
               </thead>
               <tbody>
@@ -251,8 +242,7 @@
                     {/each}
                     <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
                     <td class="text-rwha-muted">{p.age ?? '—'}</td>
-                    <td class="text-rwha-muted">{p.contract_yrs ?? '—'}</td>
-                    <td class="pr-3 text-rwha-muted">{fmtSal(p.salary)}</td>
+                    <td class="pr-3 text-rwha-muted">{p.contract_yrs ?? '—'}</td>
                   </tr>
                 {/each}
               </tbody>

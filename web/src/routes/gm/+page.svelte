@@ -231,12 +231,6 @@
               {cap.floorRoom >= 0 ? fmtSpace(cap.floorRoom) + ' above' : fmtSpace(cap.floorRoom) + ' below'}
             </span>
           </div>
-          <div class="text-right mt-1">
-            <a href="/finance"
-               class="font-mono text-xs text-rwha-muted hover:text-rwha-amber transition-colors">
-              League finance →
-            </a>
-          </div>
         </div>
       </div>
     {/if}
