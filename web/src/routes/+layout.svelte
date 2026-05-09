@@ -11,7 +11,6 @@
     { href: '/leaders',  label: 'Leaders'   },
     { href: '/power',    label: 'Power'     },
     { href: '/rosters',   label: 'Rosters'    },
-    { href: '/prospects', label: 'Prospects'  },
     { href: '/trades',    label: 'Trades'     },
     { href: '/playoffs', label: 'Playoffs'   },
   ];
