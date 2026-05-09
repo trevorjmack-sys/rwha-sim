@@ -50,7 +50,7 @@
 
       <!-- Wordmark -->
       <a href="/" class="font-mono font-bold text-rwha-amber tracking-wider text-sm shrink-0">
-        RWHA SIM
+        RWHASL
       </a>
 
       <!-- Desktop nav — hidden on mobile -->
@@ -185,6 +185,6 @@
 
   <!-- Footer -->
   <footer class="border-t border-rwha-border py-4 text-center text-rwha-muted text-xs font-mono">
-    RWHA SIM · Private league · Season 2025-26
+    RWHASL · Private league · Season 2025-26
   </footer>
 </div>

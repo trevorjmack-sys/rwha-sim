@@ -21,13 +21,16 @@
 
 <svelte:head><title>RWHA Sim</title></svelte:head>
 
-<!-- ── League logo ──────────────────────────────────────────────────────────── -->
-<div class="flex justify-center mb-8 mt-2">
-  <img src="/logos/mainlogo.png" alt="RWHA" class="h-44 w-auto object-contain drop-shadow-lg" />
-</div>
+<!-- ── Top row: logo left + three stars + PIM ───────────────────────────────── -->
+<div class="flex flex-col lg:flex-row gap-6 mb-6">
 
-<!-- ── Main grid ────────────────────────────────────────────────────────────── -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Logo -->
+  <div class="flex items-start justify-center lg:justify-start shrink-0">
+    <img src="/logos/mainlogo.png" alt="RWHASL" class="h-52 w-auto object-contain drop-shadow-lg" />
+  </div>
+
+  <!-- Three stars + PIM side by side (fill remaining width) -->
+  <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
 
   <!-- ── Three Stars ────────────────────────────────────────────────────────── -->
   <div>
@@ -105,8 +108,14 @@
     {/if}
   </div>
 
+  </div><!-- end two-col grid -->
+</div><!-- end top row -->
+
+<!-- ── Main grid (fight card full width) ─────────────────────────────────────── -->
+<div class="grid grid-cols-1 gap-6">
+
   <!-- ── Fight Card ─────────────────────────────────────────────────────────── -->
-  <div class="lg:col-span-2">
+  <div>
     <div class="flex items-center gap-3 mb-3">
       <h2 class="font-mono font-bold text-rwha-amber text-sm uppercase tracking-widest shrink-0">
         Fight Card {#if week > 0}— Week {week}{/if}
