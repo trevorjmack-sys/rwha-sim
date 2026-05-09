@@ -17,8 +17,8 @@
   }
 
   // Skater attr column order matching rwha.net
-  const SKATER_COLS = ['ck','fg','di','sk','st','en','du','ph','fo','pa','sc','df','ps','ex','ld','po','mo'] as const;
-  const GOALIE_COLS = ['sk','du','en','sz','ag','rb','sc','hs','rt','ph','ps','ex','ld','po','mo'] as const;
+  const SKATER_COLS = ['ck','fg','di','sk','st','en','du','ph','fo','pa','sc','df','ps','ex','ld'] as const;
+  const GOALIE_COLS = ['sk','du','en','sz','ag','rb','sc','hs','rt','ph','ps','ex','ld'] as const;
 
   function puckpediaUrl(name: string): string {
     return 'https://puckpedia.com/player/' + name
@@ -118,8 +118,7 @@
             {#each SKATER_COLS as col}
               <th class="uppercase">{col}</th>
             {/each}
-            <th class="text-rwha-amber">OV</th>
-            <th class="pr-3">Age</th>
+            <th class="pr-3 text-rwha-amber">OV</th>
           </tr>
         </thead>
         <tbody>
@@ -157,8 +156,7 @@
                   {a(p.attrs, col)}
                 </td>
               {/each}
-              <td class="text-rwha-amber font-bold">{p.ov}</td>
-              <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
+              <td class="pr-3 text-rwha-amber font-bold">{p.ov}</td>
             </tr>
           {/each}
         </tbody>
@@ -178,8 +176,7 @@
               {#each GOALIE_COLS as col}
                 <th class="uppercase">{col}</th>
               {/each}
-              <th class="text-rwha-amber">OV</th>
-              <th class="pr-3">Age</th>
+              <th class="pr-3 text-rwha-amber">OV</th>
             </tr>
           </thead>
           <tbody>
@@ -213,8 +210,7 @@
                     {a(p.attrs, col)}
                   </td>
                 {/each}
-                <td class="text-rwha-amber font-bold">{p.ov}</td>
-                <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
+                <td class="pr-3 text-rwha-amber font-bold">{p.ov}</td>
               </tr>
             {/each}
           </tbody>
@@ -238,8 +234,7 @@
                 <th class="w-5">C</th><th class="w-5">L</th><th class="w-5">R</th><th class="w-5">D</th>
                 <th>CON</th><th>IJ</th>
                 {#each SKATER_COLS as col}<th class="uppercase">{col}</th>{/each}
-                <th class="text-rwha-amber">OV</th>
-                <th class="pr-3">Age</th>
+                <th class="pr-3 text-rwha-amber">OV</th>
               </tr>
             </thead>
             <tbody>
@@ -270,8 +265,7 @@
                   {#each SKATER_COLS as col}
                     <td class="text-rwha-muted/70">{a(p.attrs, col)}</td>
                   {/each}
-                  <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
-                  <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
+                  <td class="pr-3 text-rwha-amber/60 font-bold">{p.ov}</td>
                 </tr>
               {/each}
             </tbody>
@@ -287,8 +281,7 @@
                   <th class="text-left pl-2 sticky left-5 bg-rwha-surface min-w-[140px]">Goalie</th>
                   <th>CON</th><th>IJ</th>
                   {#each GOALIE_COLS as col}<th class="uppercase">{col}</th>{/each}
-                  <th class="text-rwha-amber">OV</th>
-                  <th class="pr-3">Age</th>
+                  <th class="pr-3 text-rwha-amber">OV</th>
                 </tr>
               </thead>
               <tbody>
@@ -315,8 +308,7 @@
                     {#each GOALIE_COLS as col}
                       <td class="text-rwha-muted/70">{a(p.attrs, col)}</td>
                     {/each}
-                    <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
-                    <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
+                    <td class="pr-3 text-rwha-amber/60 font-bold">{p.ov}</td>
                   </tr>
                 {/each}
               </tbody>

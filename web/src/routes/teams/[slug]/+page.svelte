@@ -36,8 +36,8 @@
     return attrs[key] ?? '—';
   }
 
-  const SKATER_COLS = ['ck','fg','di','sk','st','en','du','ph','fo','pa','sc','df','ps','ex','ld','po','mo'] as const;
-  const GOALIE_COLS = ['sk','du','en','sz','ag','rb','sc','hs','rt','ph','ps','ex','ld','po','mo'] as const;
+  const SKATER_COLS = ['ck','fg','di','sk','st','en','du','ph','fo','pa','sc','df','ps','ex','ld'] as const;
+  const GOALIE_COLS = ['sk','du','en','sz','ag','rb','sc','hs','rt','ph','ps','ex','ld'] as const;
 
   // ── Schedule helpers ──────────────────────────────────────────────────────
   function outcome(g: typeof games[0]): 'W' | 'L' | 'OT' | null {
@@ -164,8 +164,7 @@
           {#each SKATER_COLS as col}
             <th class="uppercase">{col}</th>
           {/each}
-          <th class="text-rwha-amber">OV</th>
-          <th class="pr-3">Age</th>
+          <th class="pr-3 text-rwha-amber">OV</th>
         </tr>
       </thead>
       <tbody>
@@ -194,8 +193,7 @@
                 {a(p.attrs, col)}
               </td>
             {/each}
-            <td class="text-rwha-amber font-bold">{p.ov}</td>
-            <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
+            <td class="pr-3 text-rwha-amber font-bold">{p.ov}</td>
           </tr>
         {/each}
       </tbody>
@@ -215,8 +213,7 @@
             {#each GOALIE_COLS as col}
               <th class="uppercase">{col}</th>
             {/each}
-            <th class="text-rwha-amber">OV</th>
-            <th class="pr-3">Age</th>
+            <th class="pr-3 text-rwha-amber">OV</th>
           </tr>
         </thead>
         <tbody>
@@ -238,9 +235,8 @@
                   {a(p.attrs, col)}
                 </td>
               {/each}
-              <td class="text-rwha-amber font-bold">{p.ov}</td>
-              <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
-            </tr>
+              <td class="pr-3 text-rwha-amber font-bold">{p.ov}</td>
+              </tr>
           {/each}
         </tbody>
       </table>
@@ -281,9 +277,8 @@
                 {#each SKATER_COLS as col}
                   <td class="text-rwha-muted/70">{a(p.attrs, col)}</td>
                 {/each}
-                <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
-                <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
-              </tr>
+                <td class="pr-3 text-rwha-amber/60 font-bold">{p.ov}</td>
+                  </tr>
             {/each}
           </tbody>
         </table>
@@ -312,9 +307,8 @@
                   {#each GOALIE_COLS as col}
                     <td class="text-rwha-muted/70">{a(p.attrs, col)}</td>
                   {/each}
-                  <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
-                  <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
-                </tr>
+                  <td class="pr-3 text-rwha-amber/60 font-bold">{p.ov}</td>
+                      </tr>
               {/each}
             </tbody>
           </table>
