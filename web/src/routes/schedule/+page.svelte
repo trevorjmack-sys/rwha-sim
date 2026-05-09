@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   export let data: PageData;
+  $: seasonName = data.seasonName ?? '';
 
   // ── Week strip helpers ────────────────────────────────────────────────────────
   function weekHref(w: number) {
@@ -44,7 +45,10 @@
 
 <!-- ── Header ────────────────────────────────────────────────────────────────── -->
 <div class="mb-5 flex items-end justify-between gap-4">
-  <h1 class="font-mono font-bold text-rwha-amber text-lg tracking-wider uppercase">Schedule</h1>
+  <div>
+    <h1 class="font-mono font-bold text-rwha-amber text-lg tracking-wider uppercase">Schedule</h1>
+    {#if seasonName}<div class="font-mono text-xs text-rwha-muted/70 mt-0.5">{seasonName}</div>{/if}
+  </div>
   <span class="font-mono text-xs text-rwha-muted">
     {data.weeks.filter(w => w.played > 0).length} of {data.weeks.length} weeks played
   </span>

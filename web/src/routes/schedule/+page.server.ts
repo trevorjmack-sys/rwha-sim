@@ -9,7 +9,11 @@ export const load: PageServerLoad = async ({ url, platform }) => {
   if (!db) return { weeks: [] as WeekSummary[], games: [] as ScheduleGameWithRivalry[], week: 1, teamFilter: '' };
 
   const seasonId = await getActiveSeasonId(db) ?? 1;
-  const weeks    = await getScheduleWeeks(db, seasonId);
+  const [weeks, seasonRow] = await Promise.all([
+    getScheduleWeeks(db, seasonId),
+    db.prepare('SELECT name FROM seasons WHERE id = ?').bind(seasonId).first<{ name: string }>(),
+  ]);
+  const seasonName = seasonRow?.name ?? '';
 
   // Default: week in progress, else next unplayed, else last played
   const inProgress = weeks.find(w => w.played > 0 && w.played < w.total)?.week;
@@ -49,5 +53,5 @@ export const load: PageServerLoad = async ({ url, platform }) => {
         g.away_name.toLowerCase().includes(teamFilter.toLowerCase()))
     : withRivalry;
 
-  return { weeks, games: filtered, week: selectedWeek, teamFilter };
+  return { weeks, games: filtered, week: selectedWeek, teamFilter, seasonName };
 };

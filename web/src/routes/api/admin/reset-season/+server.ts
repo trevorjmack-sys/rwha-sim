@@ -69,6 +69,9 @@ export const POST: RequestHandler = async ({ locals, platform }) => {
 
     // Delete old scheduled games (stats + results already deleted above)
     db.prepare(`DELETE FROM scheduled_games WHERE season_id = ?`).bind(seasonId),
+
+    // Reset autoincrement so new games start at #1000
+    db.prepare(`INSERT OR REPLACE INTO sqlite_sequence (name, seq) VALUES ('scheduled_games', 999)`),
   ]);
 
   // Insert new schedule in batches of 100 (D1 limit)
