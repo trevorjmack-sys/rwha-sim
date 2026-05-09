@@ -70,7 +70,7 @@
           class:active={teamsActive}
           on:click={() => teamsOpen = !teamsOpen}
         >
-          Teams
+          Stats
           <span class="text-[10px] opacity-60 ml-0.5">{teamsOpen ? '▴' : '▾'}</span>
         </button>
 
@@ -150,7 +150,7 @@
             class="py-3 border-b border-rwha-border/30 font-mono text-sm text-left flex items-center justify-between
                    {teamsActive ? 'text-rwha-amber' : 'text-rwha-muted hover:text-rwha-text'} transition-colors"
           >
-            <span>Teams</span>
+            <span>Stats</span>
             <span class="text-xs opacity-60 transition-transform duration-150 {mTeamsOpen ? 'rotate-180' : ''}">▾</span>
           </button>
 
