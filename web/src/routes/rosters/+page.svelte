@@ -83,8 +83,7 @@
               <th class="uppercase">{col}</th>
             {/each}
             <th class="text-rwha-amber">OV</th>
-            <th>Age</th>
-            <th class="pr-3">Yrs</th>
+            <th class="pr-3">Age</th>
           </tr>
         </thead>
         <tbody>
@@ -112,8 +111,7 @@
                 </td>
               {/each}
               <td class="text-rwha-amber font-bold">{p.ov}</td>
-              <td class="text-rwha-muted">{p.age ?? '—'}</td>
-              <td class="pr-3 text-rwha-muted">{p.contract_yrs ?? '—'}</td>
+              <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
             </tr>
           {/each}
         </tbody>
@@ -134,8 +132,7 @@
                 <th class="uppercase">{col}</th>
               {/each}
               <th class="text-rwha-amber">OV</th>
-              <th>Age</th>
-              <th class="pr-3">Yrs</th>
+              <th class="pr-3">Age</th>
             </tr>
           </thead>
           <tbody>
@@ -159,8 +156,7 @@
                   </td>
                 {/each}
                 <td class="text-rwha-amber font-bold">{p.ov}</td>
-                <td class="text-rwha-muted">{p.age ?? '—'}</td>
-                <td class="pr-3 text-rwha-muted">{p.contract_yrs ?? '—'}</td>
+                <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
               </tr>
             {/each}
           </tbody>
@@ -185,7 +181,7 @@
                 <th>CON</th><th>IJ</th>
                 {#each SKATER_COLS as col}<th class="uppercase">{col}</th>{/each}
                 <th class="text-rwha-amber">OV</th>
-                <th>Age</th><th class="pr-3">Yrs</th>
+                <th class="pr-3">Age</th>
               </tr>
             </thead>
             <tbody>
@@ -206,8 +202,7 @@
                     <td class="text-rwha-muted/70">{a(p.attrs, col)}</td>
                   {/each}
                   <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
-                  <td class="text-rwha-muted">{p.age ?? '—'}</td>
-                  <td class="pr-3 text-rwha-muted">{p.contract_yrs ?? '—'}</td>
+                  <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
                 </tr>
               {/each}
             </tbody>
@@ -224,7 +219,7 @@
                   <th>CON</th><th>IJ</th>
                   {#each GOALIE_COLS as col}<th class="uppercase">{col}</th>{/each}
                   <th class="text-rwha-amber">OV</th>
-                  <th>Age</th><th class="pr-3">Yrs</th>
+                  <th class="pr-3">Age</th>
                 </tr>
               </thead>
               <tbody>
@@ -241,8 +236,7 @@
                       <td class="text-rwha-muted/70">{a(p.attrs, col)}</td>
                     {/each}
                     <td class="text-rwha-amber/60 font-bold">{p.ov}</td>
-                    <td class="text-rwha-muted">{p.age ?? '—'}</td>
-                    <td class="pr-3 text-rwha-muted">{p.contract_yrs ?? '—'}</td>
+                    <td class="pr-3 text-rwha-muted">{p.age ?? '—'}</td>
                   </tr>
                 {/each}
               </tbody>
