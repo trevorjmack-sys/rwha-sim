@@ -28,7 +28,43 @@
       .replace(/\s+/g, '-')
       .replace(/[^a-z-]/g, '');
   }
+
+  function photoUrl(nhlId: number | null): string | null {
+    return nhlId ? `https://puckpedia.com/s/nhl/${nhlId}.jpg` : null;
+  }
+
+  // Hover photo popup
+  let popupSrc = '';
+  let popupX = 0;
+  let popupY = 0;
+  let popupVisible = false;
+
+  function showPhoto(e: MouseEvent, nhlId: number | null) {
+    const src = photoUrl(nhlId);
+    if (!src) return;
+    popupSrc = src;
+    popupX = e.clientX + 14;
+    popupY = e.clientY - 10;
+    popupVisible = true;
+  }
+  function movePhoto(e: MouseEvent) {
+    if (!popupVisible) return;
+    popupX = e.clientX + 14;
+    popupY = e.clientY - 10;
+  }
+  function hidePhoto() {
+    popupVisible = false;
+  }
 </script>
+
+<!-- Fixed photo popup (position:fixed avoids overflow clipping) -->
+{#if popupVisible && popupSrc}
+  <div class="fixed z-[9999] pointer-events-none rounded overflow-hidden shadow-xl border border-rwha-border"
+       style="left:{popupX}px; top:{popupY}px;">
+    <img src={popupSrc} alt="" class="h-32 w-auto block"
+         on:error={() => { popupVisible = false; }} />
+  </div>
+{/if}
 
 <svelte:head><title>Rosters — RWHA Sim</title></svelte:head>
 
@@ -91,11 +127,22 @@
             <tr class="{p.injured_games_remaining > 0 ? 'bg-rwha-red/5' : ''}">
               <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{p.jersey_number ?? i + 1}</td>
               <td class="text-left pl-2 sticky left-6 bg-rwha-surface font-semibold text-rwha-text">
-                <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
-                   class="hover:text-rwha-amber transition-colors">{p.name}</a>
-                {#if p.injured_games_remaining > 0}
-                  <span class="text-rwha-red ml-1 font-normal">(INJ)</span>
-                {/if}
+                <div class="flex items-center gap-1.5">
+                  {#if photoUrl(p.nhl_id)}
+                    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+                    <img src={photoUrl(p.nhl_id)} alt=""
+                         class="h-5 w-5 rounded-full object-cover shrink-0 cursor-default"
+                         on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }}
+                         on:mouseenter={(e) => showPhoto(e, p.nhl_id)}
+                         on:mousemove={movePhoto}
+                         on:mouseleave={hidePhoto} />
+                  {/if}
+                  <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
+                     class="hover:text-rwha-amber transition-colors">{p.name}</a>
+                  {#if p.injured_games_remaining > 0}
+                    <span class="text-rwha-red font-normal">(INJ)</span>
+                  {/if}
+                </div>
               </td>
               <td class="text-rwha-amber font-bold">{x(p.position, 'C')}</td>
               <td class="text-rwha-amber font-bold">{x(p.position, 'L')}</td>
@@ -140,11 +187,22 @@
               <tr class="{p.injured_games_remaining > 0 ? 'bg-rwha-red/5' : ''}">
                 <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">G</td>
                 <td class="text-left pl-2 sticky left-5 bg-rwha-surface font-semibold text-rwha-text">
-                  <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
-                     class="hover:text-rwha-amber transition-colors">{p.name}</a>
-                  {#if p.injured_games_remaining > 0}
-                    <span class="text-rwha-red ml-1 font-normal">(INJ)</span>
-                  {/if}
+                  <div class="flex items-center gap-1.5">
+                    {#if photoUrl(p.nhl_id)}
+                      <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+                      <img src={photoUrl(p.nhl_id)} alt=""
+                           class="h-5 w-5 rounded-full object-cover shrink-0 cursor-default"
+                           on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }}
+                           on:mouseenter={(e) => showPhoto(e, p.nhl_id)}
+                           on:mousemove={movePhoto}
+                           on:mouseleave={hidePhoto} />
+                    {/if}
+                    <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
+                       class="hover:text-rwha-amber transition-colors">{p.name}</a>
+                    {#if p.injured_games_remaining > 0}
+                      <span class="text-rwha-red font-normal">(INJ)</span>
+                    {/if}
+                  </div>
                 </td>
                 <td class="text-rwha-muted">{fmtCon(p.injured_games_remaining)}</td>
                 <td class="{p.injured_games_remaining > 0 ? 'text-rwha-red font-bold' : 'text-rwha-muted'}">
@@ -189,8 +247,19 @@
                 <tr>
                   <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{p.jersey_number ?? i + 1}</td>
                   <td class="text-left pl-2 sticky left-6 bg-rwha-surface text-rwha-muted">
-                    <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
-                       class="hover:text-rwha-amber transition-colors">{p.name}</a>
+                    <div class="flex items-center gap-1.5">
+                      {#if photoUrl(p.nhl_id)}
+                        <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+                        <img src={photoUrl(p.nhl_id)} alt=""
+                             class="h-5 w-5 rounded-full object-cover shrink-0 cursor-default"
+                             on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }}
+                             on:mouseenter={(e) => showPhoto(e, p.nhl_id)}
+                             on:mousemove={movePhoto}
+                             on:mouseleave={hidePhoto} />
+                      {/if}
+                      <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
+                         class="hover:text-rwha-amber transition-colors">{p.name}</a>
+                    </div>
                   </td>
                   <td class="text-rwha-muted">{x(p.position, 'C')}</td>
                   <td class="text-rwha-muted">{x(p.position, 'L')}</td>
@@ -227,8 +296,19 @@
                   <tr>
                     <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">G</td>
                     <td class="text-left pl-2 sticky left-5 bg-rwha-surface text-rwha-muted">
-                      <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
-                         class="hover:text-rwha-amber transition-colors">{p.name}</a>
+                      <div class="flex items-center gap-1.5">
+                        {#if photoUrl(p.nhl_id)}
+                          <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+                          <img src={photoUrl(p.nhl_id)} alt=""
+                               class="h-5 w-5 rounded-full object-cover shrink-0 cursor-default"
+                               on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }}
+                               on:mouseenter={(e) => showPhoto(e, p.nhl_id)}
+                               on:mousemove={movePhoto}
+                               on:mouseleave={hidePhoto} />
+                        {/if}
+                        <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
+                           class="hover:text-rwha-amber transition-colors">{p.name}</a>
+                      </div>
                     </td>
                     <td class="text-rwha-muted">{fmtCon(p.injured_games_remaining)}</td>
                     <td class="text-rwha-muted">{p.injured_games_remaining > 0 ? p.injured_games_remaining : ''}</td>

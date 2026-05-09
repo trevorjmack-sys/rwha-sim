@@ -26,7 +26,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
 
     db.prepare(`
       SELECT id, team_id, name, position, is_goalie, roster_level, ov, age, contract_yrs,
-             salary, injured_games_remaining, is_scratch, is_personal, attrs
+             salary, injured_games_remaining, is_scratch, is_personal, nhl_id, attrs
       FROM players WHERE team_id = ?
       ORDER BY roster_level DESC, is_goalie, ov DESC
     `).bind(team.id).all<{
@@ -34,7 +34,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
       is_goalie: number; roster_level: string; ov: number;
       age: number | null; contract_yrs: number | null; salary: number | null;
       injured_games_remaining: number; is_scratch: number; is_personal: number;
-      attrs: string;
+      nhl_id: number | null; attrs: string;
     }>(),
 
     // Box scores for all completed games — to aggregate team stats
