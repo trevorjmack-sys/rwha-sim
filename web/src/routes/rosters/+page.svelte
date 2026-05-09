@@ -320,3 +320,8 @@
 
   </div>
 {/each}
+
+<style>
+  /* Left-align all column headers on the rosters page */
+  :global(.stat-table th) { text-align: left; }
+</style>
