@@ -95,7 +95,7 @@
 
   function slotClass(id: number, dups: Set<number> = duplicateIds) {
     if (id === 0) return 'border-rwha-red/50';
-    if (dups.has(id)) return 'border-rwha-red';
+    if (dups.has(id)) return 'border-rwha-amber';
     return 'border-rwha-border';
   }
 </script>
@@ -361,8 +361,8 @@
 
   <!-- Warnings -->
   {#if duplicateIds.size > 0}
-    <div class="mb-3 p-3 rounded border border-rwha-red/40 bg-rwha-red/10 text-rwha-red font-mono text-xs">
-      ⚠ Some players are assigned to multiple even-strength lines.
+    <div class="mb-3 p-3 rounded border border-rwha-amber/40 bg-rwha-amber/10 text-rwha-amber font-mono text-xs">
+      ⚠ Some players appear on multiple even-strength lines — double-shifting is allowed but use with care.
     </div>
   {/if}
 

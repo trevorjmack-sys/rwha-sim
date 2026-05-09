@@ -115,11 +115,7 @@ export const actions: Actions = {
     const esIds = [...forwards.flat(), ...defense.flat(), starter_id, backup_id];
     if (esIds.some(isNaN)) return fail(400, { error: 'All even-strength line slots must be filled' });
 
-    // No player on more than one even-strength line
-    const skaterIds = [...forwards.flat(), ...defense.flat()];
-    if (new Set(skaterIds).size !== skaterIds.length) {
-      return fail(400, { error: 'A player cannot appear on more than one even-strength line' });
-    }
+    // Duplicate skaters across even-strength lines are allowed (double-shifting)
     if (starter_id === backup_id) {
       return fail(400, { error: 'Starter and backup must be different goalies' });
     }
