@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import type { PageData } from './$types';
   export let data: PageData;
 
@@ -31,11 +32,6 @@
   let playedCount     = data.playedGames;   // updated locally after each batch
   let showNextWeek    = false;              // show reload prompt when week is done
 
-  // ── Run entire season ──────────────────────────────────────────────────────
-  let seasonRunning    = false;
-  let seasonDone       = 0;
-  let confirmRunSeason = false;   // shows inline confirm prompt
-
   // ── Reset season ───────────────────────────────────────────────────────────
   let showResetModal   = false;
   let resetBusy        = false;
@@ -54,8 +50,8 @@
       });
 
       if (!res.ok) {
-        const err = await res.json() as { message?: string };
-        message = err.message ?? `Error ${res.status}`;
+        const err = await res.json() as { message?: string; error?: string };
+        message = err.error ?? err.message ?? `Error ${res.status}`;
         return;
       }
 
@@ -67,6 +63,18 @@
       if (msg) { message = msg; return; }
 
       playedCount += games.length;
+
+      // Scroll the first game card into view before the reveal loop starts.
+      // Manual offset accounts for the global nav (48px) + sticky admin header (~120px).
+      if (games.length > 0) {
+        await tick();
+        const firstEl = document.getElementById(`game-${games[0].gameId}`);
+        if (firstEl) {
+          const top = firstEl.getBoundingClientRect().top + window.scrollY - 180;
+          window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+        }
+        await delay(300); // brief pause so scroll settles before cards start flipping
+      }
 
       // Update cards with results — reveal dramatically, one game at a time
       for (const result of games) {
@@ -123,43 +131,6 @@
     return new Promise(r => setTimeout(r, ms));
   }
 
-  async function runSeason() {
-    confirmRunSeason = false;
-    seasonRunning    = true;
-    seasonDone       = 0;
-    message          = '';
-    showNextWeek     = false;
-
-    try {
-      while (true) {
-        const res = await fetch('/api/admin/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ count: 20 }),
-        });
-
-        if (!res.ok) {
-          const err = await res.json() as { message?: string };
-          message = err.message ?? `Error ${res.status}`;
-          break;
-        }
-
-        const { games, message: msg } = await res.json() as {
-          games: { gameId: number }[];
-          message?: string;
-        };
-
-        if (msg || games.length === 0) break;
-
-        seasonDone  += games.length;
-        playedCount += games.length;
-      }
-    } finally {
-      seasonRunning = false;
-      window.location.reload();
-    }
-  }
-
   async function resetSeason() {
     resetBusy = true;
     try {
@@ -191,44 +162,31 @@
   $: remaining      = data.totalGames - playedCount;
   $: scheduledCards = cards.filter(c => c.status === 'scheduled');
 
-  // ── Personal player import ─────────────────────────────────────────────────
-  let personalUrl    = '';
-  let personalMsg    = '';
-  let personalOk     = false;
-  let personalBusy   = false;
 
-  async function importPersonal() {
-    if (!personalUrl.trim()) return;
-    personalBusy = true; personalMsg = ''; personalOk = false;
-    try {
-      const res = await fetch('/api/admin/import-personal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csvUrl: personalUrl.trim() }),
-      });
-      const body = await res.json() as { ok?: boolean; imported?: number; message?: string };
-      if (res.ok && body.ok) {
-        personalOk  = true;
-        personalMsg = `✓ Imported ${body.imported} personal players`;
-      } else {
-        personalMsg = body.message ?? `Error ${res.status}`;
-      }
-    } catch (e) {
-      personalMsg = String(e);
-    } finally {
-      personalBusy = false;
-    }
-  }
 </script>
 
 <svelte:head><title>Admin — RWHA Sim</title></svelte:head>
 
 <!-- ── Header bar ─────────────────────────────────────────────────────────── -->
-<div class="mb-6 flex items-end justify-between gap-4">
+<div class="sticky top-12 z-40 -mx-4 px-4 pt-4 pb-3 mb-2
+            bg-rwha-bg/95 backdrop-blur border-b border-rwha-border/60
+            flex items-end justify-between gap-4">
   <div>
     <h1 class="font-mono font-bold text-rwha-amber text-lg tracking-wider uppercase">
       ⚡ Commissioner
     </h1>
+    <div class="flex gap-2 mt-2">
+      <a href="/admin/trade"
+         class="inline-block px-4 py-1.5 text-sm font-mono font-bold rounded border-2
+                border-rwha-text text-rwha-text hover:border-rwha-amber hover:text-rwha-amber transition-colors">
+        ⇄ Trade Manager
+      </a>
+      <a href="/admin/rivalries"
+         class="inline-block px-4 py-1.5 text-sm font-mono font-bold rounded border-2
+                border-rwha-text text-rwha-text hover:border-rwha-amber hover:text-rwha-amber transition-colors">
+        🔥 Rivalries
+      </a>
+    </div>
     <p class="text-rwha-muted text-sm mt-0.5 font-mono">
       Week {data.currentWeek} · {playedCount}/{data.totalGames} games played · {remaining} remaining
     </p>
@@ -238,7 +196,7 @@
   <div class="flex items-center gap-3">
     <div class="flex items-center gap-2 text-sm text-rwha-muted font-mono">
       <span>Run</span>
-      {#each [1, 2, 3, 4, 5] as n}
+      {#each [1, 3, 5, 10] as n}
         <button
           class="w-8 h-8 rounded border font-bold transition-colors
                  {batchCount === n
@@ -255,50 +213,19 @@
              {running || scheduledCards.length === 0
                ? 'bg-rwha-border text-rwha-muted cursor-not-allowed'
                : 'bg-rwha-amber text-rwha-bg hover:brightness-110 active:scale-95 shadow-lg shadow-rwha-amber/20'}"
-      disabled={running || seasonRunning || scheduledCards.length === 0}
+      disabled={running || scheduledCards.length === 0}
       on:click={() => runGames(batchCount)}
     >
       {running ? '⏳ Simulating…' : '▶ Run Games'}
     </button>
 
-    <!-- Run Season: idle → confirm prompt → running -->
-    {#if confirmRunSeason}
-      <div class="flex items-center gap-2 bg-rwha-surface border border-rwha-amber/40 rounded px-3 py-1.5">
-        <span class="font-mono text-xs text-rwha-amber">Run all {remaining} games?</span>
-        <button
-          class="font-mono text-xs font-bold text-rwha-bg bg-rwha-amber px-2.5 py-1 rounded
-                 hover:brightness-110 active:scale-95 transition-all"
-          on:click={runSeason}
-        >Yes</button>
-        <button
-          class="font-mono text-xs text-rwha-muted hover:text-rwha-text transition-colors"
-          on:click={() => confirmRunSeason = false}
-        >Cancel</button>
-      </div>
-    {:else}
-      <button
-        class="px-5 py-2 rounded font-mono font-bold text-sm uppercase tracking-widest transition-all border
-               {seasonRunning || running || remaining === 0
-                 ? 'border-rwha-border text-rwha-muted cursor-not-allowed'
-                 : 'border-rwha-amber/50 text-rwha-amber hover:bg-rwha-amber/10 active:scale-95'}"
-        disabled={seasonRunning || running || remaining === 0}
-        on:click={() => confirmRunSeason = true}
-      >
-        {#if seasonRunning}
-          ⏳ {seasonDone} games…
-        {:else}
-          ▶▶ Run Season
-        {/if}
-      </button>
-    {/if}
-
     <!-- Reset -->
     <button
       class="px-4 py-2 rounded font-mono font-bold text-sm uppercase tracking-widest transition-all border
-             {running || seasonRunning
+             {running
                ? 'border-rwha-border text-rwha-muted cursor-not-allowed'
                : 'border-rwha-red/40 text-rwha-red/70 hover:border-rwha-red hover:text-rwha-red hover:bg-rwha-red/5 active:scale-95'}"
-      disabled={running || seasonRunning}
+      disabled={running}
       on:click={() => showResetModal = true}
     >↺ Reset</button>
   </div>
@@ -339,7 +266,8 @@
 
 <div class="space-y-3">
   {#each cards as card (card.gameId)}
-    <div class="card overflow-hidden transition-all duration-300
+    <div id="game-{card.gameId}"
+         class="card overflow-hidden transition-all duration-300
                 {card.status === 'revealed' || card.status === 'complete' ? 'border-rwha-border' : 'border-rwha-border/50'}">
 
       <!-- Score row -->
@@ -472,42 +400,3 @@
   </div>
 {/if}
 
-<!-- ── Personal player import ────────────────────────────────────────────── -->
-<div class="mt-10">
-  <div class="section-header">Personal Players</div>
-  <div class="card px-4 py-4">
-    <p class="font-mono text-xs text-rwha-muted mb-3">
-      Paste the published Google Sheet CSV URL (File → Share → Publish to web → CSV).
-      Clears all existing personal players and imports the 22 rows fresh.
-      Required columns: <span class="text-rwha-text">team, name, position, age, ov, ck, fg, di, sk, st, en, du, ph, fo, pa, sc, df, ps, ex, ld, po, mo</span>
-    </p>
-
-    <div class="flex gap-2">
-      <input
-        type="url"
-        bind:value={personalUrl}
-        placeholder="https://docs.google.com/spreadsheets/d/…/export?format=csv"
-        class="flex-1 bg-rwha-bg border border-rwha-border rounded px-3 py-2
-               font-mono text-xs text-rwha-text placeholder:text-rwha-muted/50
-               focus:outline-none focus:border-rwha-amber/60 transition-colors"
-      />
-      <button
-        disabled={personalBusy || !personalUrl.trim()}
-        on:click={importPersonal}
-        class="px-5 py-2 rounded font-mono font-bold text-xs uppercase tracking-widest transition-all shrink-0
-               {personalBusy || !personalUrl.trim()
-                 ? 'bg-rwha-border text-rwha-muted cursor-not-allowed'
-                 : 'bg-rwha-amber text-rwha-bg hover:brightness-110 active:scale-95'}"
-      >{personalBusy ? '⏳ Importing…' : 'Import'}</button>
-    </div>
-
-    {#if personalMsg}
-      <div class="mt-3 p-2 rounded font-mono text-xs
-                  {personalOk
-                    ? 'bg-rwha-green/10 border border-rwha-green/30 text-rwha-green'
-                    : 'bg-rwha-red/10 border border-rwha-red/30 text-rwha-red'}">
-        {personalMsg}
-      </div>
-    {/if}
-  </div>
-</div>

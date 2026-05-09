@@ -3,11 +3,24 @@
   import type { PageData } from './$types';
   export let data: PageData;
 
-  $: ({ team, games, record, roster, teamStats } = data);
+  $: ({ team, games, record, roster, teamStats, skaterStats, goalieStats } = data);
+
+  // ── Conference / division names ───────────────────────────────────────────
+  const CONF_NAME: Record<number, string> = { 1: 'Honey', 2: 'Sturdy' };
 
   // ── Tab state (default: roster) ───────────────────────────────────────────
-  type Tab = 'roster' | 'schedule' | 'stats';
+  type Tab = 'roster' | 'players' | 'stats' | 'schedule';
   let tab: Tab = ($page.url.searchParams.get('tab') as Tab) ?? 'roster';
+
+  // ── Player-stats helpers ──────────────────────────────────────────────────
+  function fmtPlusMinus(n: number) {
+    if (n > 0) return `+${n}`;
+    return String(n);
+  }
+  function fmtSvPct(v: number) {
+    // 0.912 → ".912"
+    return v === 0 ? '—' : v.toFixed(3).replace(/^0/, '');
+  }
 
   // ── Roster helpers ────────────────────────────────────────────────────────
   function hasPos(pos: string, check: string) {
@@ -65,6 +78,12 @@
           <span>Farm: <span class="text-rwha-text">{team.farm_name}</span></span>
         {/if}
       </div>
+      {#if team.conference != null}
+        <div class="font-mono text-xs text-rwha-muted/60 mt-0.5">
+          {CONF_NAME[team.conference] ?? `Conf ${team.conference}`} Conference
+          {#if team.division}· {team.division} Division{/if}
+        </div>
+      {/if}
     </div>
 
     <!-- Record pill -->
@@ -110,15 +129,20 @@
 </div>
 
 <!-- ── Tab bar ─────────────────────────────────────────────────────────────────── -->
-<div class="flex gap-1 font-mono text-sm mb-5">
-  {#each (['roster', 'stats', 'schedule'] as Tab[]) as t}
+<div class="flex flex-wrap gap-1 font-mono text-sm mb-5">
+  {#each ([
+    ['roster',   'Roster'],
+    ['players',  'Player Stats'],
+    ['stats',    'Team Stats'],
+    ['schedule', 'Schedule'],
+  ] as [Tab, string][]) as [t, label]}
     <button
-      class="px-4 py-1.5 rounded border transition-colors capitalize
+      class="px-4 py-1.5 rounded border transition-colors
              {tab === t
                ? 'border-rwha-amber bg-rwha-amber/10 text-rwha-amber'
                : 'border-rwha-border text-rwha-muted hover:border-rwha-amber/40'}"
       on:click={() => tab = t}
-    >{t}</button>
+    >{label}</button>
   {/each}
 </div>
 
@@ -313,6 +337,101 @@
         </div>
       {/if}
     </details>
+  {/if}
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- PLAYER STATS TAB                                                            -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+{:else if tab === 'players'}
+
+  {#if skaterStats.length === 0 && goalieStats.length === 0}
+    <div class="card p-8 text-center text-rwha-muted font-mono text-sm">
+      No games played yet — check back after the first week.
+    </div>
+  {:else}
+
+    <!-- Skaters -->
+    {#if skaterStats.length > 0}
+      <div class="section-header">Skaters</div>
+      <div class="card mb-4 overflow-x-auto">
+        <table class="stat-table text-xs whitespace-nowrap">
+          <thead>
+            <tr class="border-b border-rwha-border">
+              <th class="text-left pl-3 sticky left-0 bg-rwha-surface w-6">#</th>
+              <th class="text-left pl-2 sticky left-6 bg-rwha-surface min-w-[140px]">Player</th>
+              <th class="text-left">Pos</th>
+              <th>GP</th>
+              <th class="text-rwha-amber">G</th>
+              <th class="text-rwha-amber">A</th>
+              <th class="text-rwha-amber">PTS</th>
+              <th>+/–</th>
+              <th>SOG</th>
+              <th>Hits</th>
+              <th>Blk</th>
+              <th class="pr-3">PIM</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each skaterStats as p, i}
+              <tr>
+                <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{i + 1}</td>
+                <td class="text-left pl-2 sticky left-6 bg-rwha-surface font-semibold text-rwha-text">{p.name}</td>
+                <td class="text-rwha-muted font-mono">{p.position}</td>
+                <td class="text-rwha-muted">{p.gp}</td>
+                <td class="text-rwha-amber font-bold">{p.g}</td>
+                <td class="text-rwha-amber font-bold">{p.a}</td>
+                <td class="text-rwha-amber font-bold">{p.pts}</td>
+                <td class="{p.plus_minus > 0 ? 'text-rwha-green' : p.plus_minus < 0 ? 'text-rwha-red' : 'text-rwha-muted'} font-mono">
+                  {fmtPlusMinus(p.plus_minus)}
+                </td>
+                <td class="text-rwha-muted">{p.sog}</td>
+                <td class="text-rwha-muted">{p.hits}</td>
+                <td class="text-rwha-muted">{p.blocks}</td>
+                <td class="pr-3 text-rwha-muted">{p.pim}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
+    <!-- Goalies -->
+    {#if goalieStats.length > 0}
+      <div class="section-header">Goalies</div>
+      <div class="card overflow-x-auto">
+        <table class="stat-table text-xs whitespace-nowrap">
+          <thead>
+            <tr class="border-b border-rwha-border">
+              <th class="text-left pl-3 sticky left-0 bg-rwha-surface min-w-[140px]">Goalie</th>
+              <th>GP</th>
+              <th class="text-rwha-green">W</th>
+              <th class="text-rwha-red">L</th>
+              <th class="text-rwha-amber">OT</th>
+              <th>SA</th>
+              <th>GA</th>
+              <th class="text-rwha-amber">SV%</th>
+              <th class="pr-3 text-rwha-amber">GAA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each goalieStats as g}
+              <tr>
+                <td class="pl-3 sticky left-0 bg-rwha-surface font-semibold text-rwha-text">{g.name}</td>
+                <td class="text-rwha-muted">{g.gp}</td>
+                <td class="text-rwha-green font-bold">{g.w}</td>
+                <td class="text-rwha-red">{g.l}</td>
+                <td class="text-rwha-amber">{g.otl}</td>
+                <td class="text-rwha-muted">{g.sa}</td>
+                <td class="text-rwha-muted">{g.ga}</td>
+                <td class="text-rwha-amber font-bold">{fmtSvPct(g.svPct)}</td>
+                <td class="pr-3 text-rwha-amber font-bold">{g.gaa}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
   {/if}
 
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->

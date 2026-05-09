@@ -14,6 +14,8 @@ export interface TeamRow {
   gm_email: string;
   farm_name: string | null;
   is_commissioner: number;
+  conference: number;  // 1 = Honey, 2 = Sturdy
+  division: string;    // 'Jofa' | 'Titan' | 'Cooper' | 'CCM'
 }
 
 export interface PlayerRow {
@@ -32,6 +34,7 @@ export interface PlayerRow {
   injured_games_remaining: number;
   suspended_games_remaining: number;
   is_personal: number;
+  jersey_number: number | null;
 }
 
 export interface GameRow {
@@ -71,10 +74,13 @@ export interface TeamLinesRow {
 export interface StandingsRow {
   team_id: number;
   team_name: string;
+  conference: number;
+  division: string;
   gp: number;
   w: number;
   l: number;
   otl: number;
+  t: number;
   pts: number;
   gf: number;
   ga: number;
@@ -84,8 +90,10 @@ export interface StandingsRow {
 export async function getStandings(db: D1Database, seasonId: number): Promise<StandingsRow[]> {
   const { results } = await db.prepare(`
     SELECT
-      t.id   AS team_id,
-      t.name AS team_name,
+      t.id         AS team_id,
+      t.name       AS team_name,
+      t.conference AS conference,
+      t.division   AS division,
       COUNT(sg.id)                                                      AS gp,
       COALESCE(SUM(CASE
         WHEN sg.home_team_id = t.id AND r.home_goals > r.away_goals THEN 1
@@ -97,14 +105,18 @@ export async function getStandings(db: D1Database, seasonId: number): Promise<St
           (sg.away_team_id = t.id AND r.away_goals < r.home_goals)
         ) THEN 1 ELSE 0 END), 0)                                        AS l,
       COALESCE(SUM(CASE
-        WHEN r.final_label != 'FINAL' AND (
+        WHEN r.final_label = 'FINAL / OT' AND (
           (sg.home_team_id = t.id AND r.home_goals < r.away_goals) OR
           (sg.away_team_id = t.id AND r.away_goals < r.home_goals)
         ) THEN 1 ELSE 0 END), 0)                                        AS otl,
       COALESCE(SUM(CASE
+        WHEN r.final_label = 'FINAL / TIE' THEN 1
+        ELSE 0 END), 0)                                                 AS t,
+      COALESCE(SUM(CASE
         WHEN sg.home_team_id = t.id AND r.home_goals > r.away_goals THEN 2
         WHEN sg.away_team_id = t.id AND r.away_goals > r.home_goals THEN 2
-        WHEN r.final_label != 'FINAL' AND (
+        WHEN r.final_label = 'FINAL / TIE' THEN 1
+        WHEN r.final_label = 'FINAL / OT' AND (
           (sg.home_team_id = t.id AND r.home_goals < r.away_goals) OR
           (sg.away_team_id = t.id AND r.away_goals < r.home_goals)
         ) THEN 1
@@ -121,8 +133,8 @@ export async function getStandings(db: D1Database, seasonId: number): Promise<St
                                  AND sg.status = 'complete'
     LEFT JOIN game_results r ON r.game_id = sg.id
     WHERE t.season_id = ?
-    GROUP BY t.id, t.name
-    ORDER BY pts DESC, (gf - ga) DESC, gf DESC
+    GROUP BY t.id, t.name, t.conference, t.division
+    ORDER BY t.conference, t.division, pts DESC, (gf - ga) DESC, gf DESC
   `).bind(seasonId, seasonId).all<StandingsRow>();
   return results;
 }

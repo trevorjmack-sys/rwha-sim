@@ -6,7 +6,7 @@
 // players (e.g. "C/L") are eligible for any of their listed positions.
 
 import type {
-  Team, Skater, Goalie, Lines, ForwardLine, DefensePair, Position,
+  Team, Skater, Goalie, Lines, ForwardLine, DefensePair, Position, PPUnit, PKUnit,
 } from './types.ts';
 
 const DEFAULT_FWD_TOI: [number, number, number, number] = [20, 17, 14, 9];
@@ -112,12 +112,17 @@ export function generateLines(team: Team): Lines {
     lines.push({ c, lw, rw });
   }
 
-  // Defense pairs: top 6 by OV, paired sequentially
+  // Defense pairs: top 6 by OV; call up farm D if pro roster is short
+  const farmDefense = team.farmSkaters
+    .filter(s => !s.injured && s.position.includes('D'))
+    .sort((a, b) => b.ov - a.ov);
+  const allDefense = [...defense, ...farmDefense];
+
   const dUsed = new Set<Skater>();
   const dPicks: Skater[] = [];
   for (let i = 0; i < 6; i++) {
-    const pick = takeBest(defense, dUsed, 'D');
-    if (!pick) throw new Error(`Not enough D-men for ${team.name}`);
+    const pick = takeBest(allDefense, dUsed, 'D');
+    if (!pick) throw new Error(`${team.name} has fewer than 6 healthy D-men (including farm)`);
     dPicks.push(pick);
   }
   const pairs: DefensePair[] = [
@@ -126,24 +131,61 @@ export function generateLines(team: Team): Lines {
     { ld: dPicks[4]!, rd: dPicks[5]! },
   ];
 
-  // Goalies: starter = highest OV, backup = next
-  const goalies = [...team.proGoalies]
-    .filter(g => !g.injured)
-    .sort((a, b) => b.ov - a.ov);
+  // Goalies: prefer healthy pro goalies, call up farm if needed
+  const proGoalies  = [...team.proGoalies].filter(g => !g.injured).sort((a, b) => b.ov - a.ov);
+  const farmGoalies = [...team.farmGoalies].filter(g => !g.injured).sort((a, b) => b.ov - a.ov);
+  const goalies = proGoalies.length >= 2
+    ? proGoalies
+    : [...proGoalies, ...farmGoalies];
   if (goalies.length < 2) {
-    throw new Error(`Need at least 2 healthy goalies for ${team.name}`);
+    // Last resort: include injured pro goalies rather than crashing
+    const allPro = [...team.proGoalies].sort((a, b) => b.ov - a.ov);
+    goalies.push(...allPro.filter(g => !goalies.includes(g)));
+  }
+  if (goalies.length < 2) {
+    throw new Error(`Need at least 2 goalies for ${team.name}`);
   }
   const starter: Goalie = goalies[0]!;
   const backup:  Goalie = goalies[1]!;
+
+  // Auto-generate PP/PK units from the sorted roster.
+  // PP: pick forwards by (pa + sc), D by pa. PK: pick by (di + df).
+  const ppScore  = (s: Skater) => (s.attrs.pa ?? 50) + (s.attrs.sc ?? 50);
+  const pkScore  = (s: Skater) => (s.attrs.di ?? 50) + (s.attrs.df ?? 50);
+
+  const healthyFwd = [...proSkaters]
+    .filter(s => !s.position.includes('D'))
+    .sort((a, b) => ppScore(b) - ppScore(a));
+  const healthyDef = [...defense].sort((a, b) => ppScore(b) - ppScore(a));
+
+  const pp: [PPUnit, PPUnit] = [
+    {
+      lw: healthyFwd[0]!, c: healthyFwd[1]!, rw: healthyFwd[2]!,
+      ld: healthyDef[0]!, rd: healthyDef[1]!,
+    },
+    {
+      lw: healthyFwd[3] ?? healthyFwd[0]!, c: healthyFwd[4] ?? healthyFwd[1]!, rw: healthyFwd[5] ?? healthyFwd[2]!,
+      ld: healthyDef[2] ?? healthyDef[0]!, rd: healthyDef[3] ?? healthyDef[1]!,
+    },
+  ];
+
+  const pkFwd = [...proSkaters]
+    .filter(s => !s.position.includes('D'))
+    .sort((a, b) => pkScore(b) - pkScore(a));
+  const pkDef = [...defense].sort((a, b) => pkScore(b) - pkScore(a));
+
+  const pk: [PKUnit, PKUnit] = [
+    { lf: pkFwd[0]!, rf: pkFwd[1]!, ld: pkDef[0]!, rd: pkDef[1]! },
+    { lf: pkFwd[2] ?? pkFwd[0]!, rf: pkFwd[3] ?? pkFwd[1]!, ld: pkDef[2] ?? pkDef[0]!, rd: pkDef[3] ?? pkDef[1]! },
+  ];
 
   return {
     forwards: lines as [ForwardLine, ForwardLine, ForwardLine, ForwardLine],
     defense:  pairs as [DefensePair, DefensePair, DefensePair],
     starter,
     backup,
-    toi: {
-      forwards: DEFAULT_FWD_TOI,
-      defense:  DEFAULT_DEF_TOI,
-    },
+    toi: { forwards: DEFAULT_FWD_TOI, defense: DEFAULT_DEF_TOI },
+    pp,
+    pk,
   };
 }

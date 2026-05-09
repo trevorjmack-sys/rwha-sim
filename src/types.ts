@@ -140,24 +140,35 @@ export interface DefensePair {
   rd: Skater;
 }
 
+// ── Special-teams units ───────────────────────────────────────────────────────
+export interface PPUnit {
+  lw: Skater; c: Skater; rw: Skater;   // three forwards
+  ld: Skater; rd: Skater;              // two D / offensive D
+}
+export interface PKUnit {
+  lf: Skater; rf: Skater;             // two forwards
+  ld: Skater; rd: Skater;             // two D
+}
+
 export interface Lines {
   forwards: [ForwardLine, ForwardLine, ForwardLine, ForwardLine]; // L1..L4
   defense: [DefensePair, DefensePair, DefensePair];               // D1..D3
   starter: Goalie;
   backup: Goalie;
-  // Default minutes per line slot. Sum to ~60 per skater pos group.
-  // Phase 1 uses fixed defaults; Phase 3 lets GMs override.
   toi: {
     forwards: [number, number, number, number]; // minutes per forward line
     defense: [number, number, number];          // minutes per D pair
   };
+  // Optional — filled from GM settings; auto-generated if absent.
+  pp?: [PPUnit, PPUnit];   // PP1, PP2
+  pk?: [PKUnit, PKUnit];   // PK1, PK2
 }
 
 // ── Box-score / game-result types ────────────────────────────────────────────
-export type Strength = 'EV' | 'PP' | 'SH' | 'EN' | 'PS' | 'SO';
+export type Strength = 'EV' | 'PP' | 'SH' | 'EN' | 'PS';
 
 export interface GoalEvent {
-  period: number;     // 1, 2, 3 = regulation; 4 = OT; 5 = SO (logical)
+  period: number;     // 1, 2, 3 = regulation; 4 = OT
   time: string;       // "MM:SS" within the period
   team: string;       // team name
   scorer: string;
@@ -183,6 +194,9 @@ export interface FightEvent {
   homePlayer: string;
   awayPlayer: string;
   outcome: 'home' | 'away' | 'draw';
+  // Game misconduct flags — ejected player serves a 1-game suspension
+  homeGameMisconduct?: boolean;
+  awayGameMisconduct?: boolean;
 }
 
 export interface SkaterStatLine {
@@ -235,7 +249,7 @@ export interface BoxScore {
   week: number;
   home: TeamGameTotals;
   away: TeamGameTotals;
-  finalLabel: 'FINAL' | 'FINAL / OT' | 'FINAL / SO';
+  finalLabel: 'FINAL' | 'FINAL / OT' | 'FINAL / TIE';
   goals: GoalEvent[];
   penalties: PenaltyEvent[];
   fights: FightEvent[];
@@ -259,12 +273,13 @@ export interface TeamSeasonRecord {
   w: number;
   l: number;
   otl: number;           // OT loss (1 point)
-  pts: number;           // W×2 + OTL×1
+  t: number;             // tie after OT (1 point)
+  pts: number;           // W×2 + OTL×1 + T×1
   gf: number;
   ga: number;
   diff: number;          // GF - GA
-  streak: string;        // e.g. "W3", "L1", "OT2"
-  last10: { w: number; l: number; otl: number };
+  streak: string;        // e.g. "W3", "L1", "OT2", "T1"
+  last10: { w: number; l: number; otl: number; t: number };
 }
 
 export interface SkaterSeasonStats {

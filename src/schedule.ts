@@ -1,101 +1,101 @@
-// ── Schedule generator ────────────────────────────────────────────────────────
+// ── Schedule generator — 41-game Summer Season ───────────────────────────────
 //
-// Produces a balanced 82-game regular-season schedule for the RWHA.
+// Format: 22 teams in 2 conferences of 11.
 //
-// The math: 22 teams × 82 games ÷ 2 = 902 total games.
-// With 231 unique pairs (C(22,2)), 902 games means some pairs play 3 times
-// and some play 4 times. Each team must play exactly 19 four-game opponents
-// and 2 three-game opponents (19×4 + 2×3 = 82).
+//   Within-conference:  play each of 10 opponents 3 times = 30 games
+//                       (one opponent gets 2H+1A, the other 1H+2A per team)
+//   Cross-conference:   play each of 11 opponents 1 time  = 11 games
 //
-// We designate the 22 "three-game" pairs as a Hamiltonian cycle through all
-// teams (0→1→2→...→21→0). This gives every team exactly 2 three-game
-// opponents and guarantees perfect home/away balance (41H + 41A each):
-//
-//   4-game pairs:  2 home + 2 away at each venue (209 × 4 = 836 games)
-//   3-game pairs:  in the cycle, each team alternates being the "2H side"
-//                  (one neighbour gets 2H+1A, the other gets 1H+2A), so
-//                  every team contributes 3H + 3A from its two 3-game
-//                  opponents.  3H + 38H = 41H, 3A + 38A = 41A.  ✓
-//
-// Games are then seeded-shuffled and distributed across 26 weeks.
+//   Total: 41 games per team.
+//   Total unique games: 22 × 41 / 2 = 451.
+//   Season length: ~21 weeks (~2 games/team/week).
 
 import type { ScheduledGame } from './types.ts';
 import { makeRng } from './rng.ts';
 
-export const SEASON_WEEKS = 26;
+export const SEASON_WEEKS = 21;
+
+export interface TeamEntry {
+  name:       string;
+  conference: 1 | 2;
+}
 
 export function generateSchedule(
-  teamNames: string[],
+  teams: TeamEntry[],
   seed = 1,
 ): ScheduledGame[] {
-  const n   = teamNames.length;   // 22
   const rng = makeRng(seed);
 
-  // ── Designate 3-game pairs via a Hamiltonian cycle ────────────────────────
-  // The cycle is 0→1→2→...→(n-1)→0.  For each directed edge i→j, team i
-  // gets the "2H" side of the 3-game series (2 home, 1 away) and team j
-  // gets 1 home, 2 away.  Because each team is both a "from" node and a
-  // "to" node exactly once in the cycle, every team ends up with 3H+3A from
-  // its two 3-game opponents.  Combined with 38H+38A from 4-game opponents
-  // that's exactly 41H + 41A.
-  //
-  // cycleHome: canonical pair key "min|max" → the team that gets 2H.
-  const cycleHome = new Map<string, number>();
-  for (let i = 0; i < n; i++) {
-    const from = i, to = (i + 1) % n;
-    const key  = `${Math.min(from, to)}|${Math.max(from, to)}`;
-    cycleHome.set(key, from);   // 'from' = the 2H team for this 3-game pair
+  const conf1 = teams.filter(t => t.conference === 1);
+  const conf2 = teams.filter(t => t.conference === 2);
+
+  if (conf1.length !== 11 || conf2.length !== 11) {
+    throw new Error(
+      `generateSchedule requires exactly 11 teams per conference ` +
+      `(got ${conf1.length} + ${conf2.length})`,
+    );
   }
 
-  // ── Build game list ───────────────────────────────────────────────────────
-  const matchups: [number, number][] = [];
+  const matchups: [string, string][] = [];  // [home, away]
 
-  for (let a = 0; a < n; a++) {
-    for (let b = a + 1; b < n; b++) {
-      const key = `${a}|${b}`;
-      const home2 = cycleHome.get(key);  // defined iff this is a 3-game pair
-      if (home2 !== undefined) {
-        // 3-game pair — use cycle direction for the 2H assignment
+  // ── Within-conference: 3 games per pair ───────────────────────────────────
+  const addConferenceGames = (conf: TeamEntry[]) => {
+    for (let a = 0; a < conf.length; a++) {
+      for (let b = a + 1; b < conf.length; b++) {
+        // Randomly assign which team gets 2 home games
+        const home2 = rng.bool(0.5) ? a : b;
         const away1 = home2 === a ? b : a;
-        matchups.push([home2, away1]);
-        matchups.push([home2, away1]);
-        matchups.push([away1, home2]);
+        matchups.push([conf[home2]!.name, conf[away1]!.name]);
+        matchups.push([conf[home2]!.name, conf[away1]!.name]);
+        matchups.push([conf[away1]!.name, conf[home2]!.name]);
+      }
+    }
+  };
+
+  addConferenceGames(conf1);
+  addConferenceGames(conf2);
+
+  // ── Cross-conference: 1 game per pair (home alternates by round) ──────────
+  // Each conf-1 team plays each conf-2 team exactly once.
+  // Home assignment: alternate row-by-row to balance H/A across the conference.
+  for (let a = 0; a < conf1.length; a++) {
+    for (let b = 0; b < conf2.length; b++) {
+      // Checkerboard pattern: even sum → conf1 is home, odd sum → conf2 is home
+      if ((a + b) % 2 === 0) {
+        matchups.push([conf1[a]!.name, conf2[b]!.name]);
       } else {
-        // 4-game pair — 2H + 2A for each side
-        matchups.push([a, b]);
-        matchups.push([a, b]);
-        matchups.push([b, a]);
-        matchups.push([b, a]);
+        matchups.push([conf2[b]!.name, conf1[a]!.name]);
       }
     }
   }
 
-  // Sanity: verify every team has exactly 82 games scheduled
-  const gpCheck = new Array<number>(n).fill(0);
-  for (const [h, a] of matchups) { gpCheck[h]!++; gpCheck[a]!++; }
-  for (let i = 0; i < n; i++) {
-    if (gpCheck[i] !== 82) {
-      throw new Error(
-        `Schedule bug: ${teamNames[i]} has ${gpCheck[i]} games, expected 82`,
-      );
+  // ── Sanity: each team should have exactly 41 games ────────────────────────
+  const gpCheck = new Map<string, number>();
+  for (const t of teams) gpCheck.set(t.name, 0);
+  for (const [h, a] of matchups) {
+    gpCheck.set(h, (gpCheck.get(h) ?? 0) + 1);
+    gpCheck.set(a, (gpCheck.get(a) ?? 0) + 1);
+  }
+  for (const [name, gp] of gpCheck) {
+    if (gp !== 41) {
+      throw new Error(`Schedule bug: ${name} has ${gp} games, expected 41`);
     }
   }
 
-  // ── Fisher-Yates shuffle ──────────────────────────────────────────────────
+  // ── Fisher-Yates shuffle ─────────────────────────────────────────────────
   for (let i = matchups.length - 1; i > 0; i--) {
     const j = rng.int(0, i);
     [matchups[i], matchups[j]] = [matchups[j]!, matchups[i]!];
   }
 
-  // ── Assign to weeks (1–26) ────────────────────────────────────────────────
-  // ~34–35 games per week. Each team plays ~3.15 games/week on average.
-  const total        = matchups.length;                          // 902
-  const gamesPerWeek = Math.ceil(total / SEASON_WEEKS);          // 35
+  // ── Distribute across weeks (~22 games/week) ─────────────────────────────
+  const total        = matchups.length;  // 451
+  const gamesPerWeek = Math.ceil(total / SEASON_WEEKS);
 
   return matchups.map(([hi, ai], idx) => ({
     gameId:   idx + 1,
     week:     Math.min(SEASON_WEEKS, Math.floor(idx / gamesPerWeek) + 1),
-    homeTeam: teamNames[hi]!,
-    awayTeam: teamNames[ai]!,
+    homeTeam: hi,
+    awayTeam: ai,
   }));
 }

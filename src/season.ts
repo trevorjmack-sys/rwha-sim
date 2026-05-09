@@ -9,7 +9,7 @@ import type {
   TeamSeasonRecord, SeasonResults,
 } from './types.ts';
 import { simulateGame } from './sim.ts';
-import { generateSchedule } from './schedule.ts';
+import { generateSchedule, type TeamEntry } from './schedule.ts';
 
 export interface SeasonOptions {
   seed?: number;
@@ -22,26 +22,34 @@ export function simulateSeason(
 ): SeasonResults {
   const seed  = opts.seed ?? Math.floor(Math.random() * 0x7fffffff);
   const teams = [...league.teams.values()];
-  const names = teams.map(t => t.name);
 
-  const schedule = generateSchedule(names, seed);
+  // Split teams into two conferences alphabetically for standalone simulation.
+  // In production the conference assignment comes from the DB (admin-configurable).
+  const sortedNames = teams.map(t => t.name).sort();
+  const conf1Set    = new Set(sortedNames.slice(0, 11));
+  const teamEntries: TeamEntry[] = teams.map(t => ({
+    name:       t.name,
+    conference: (conf1Set.has(t.name) ? 1 : 2) as 1 | 2,
+  }));
+
+  const schedule = generateSchedule(teamEntries, seed);
 
   // ── Accumulators ─────────────────────────────────────────────────────────
   const standings = new Map<string, TeamSeasonRecord>();
   for (const t of teams) {
     standings.set(t.name, {
       team: t.name, gp: 0,
-      w: 0, l: 0, otl: 0, pts: 0,
+      w: 0, l: 0, otl: 0, t: 0, pts: 0,
       gf: 0, ga: 0, diff: 0,
       streak: '',
-      last10: { w: 0, l: 0, otl: 0 },
+      last10: { w: 0, l: 0, otl: 0, t: 0 },
     });
   }
 
   const skaterMap  = new Map<string, SkaterSeasonStats>();  // key = "name|team"
   const goalieMap  = new Map<string, GoalieSeasonStats>();  // key = "name|team"
   // Rolling last-10 result queues
-  const last10Queue = new Map<string, ('W' | 'L' | 'OT')[]>();
+  const last10Queue = new Map<string, ('W' | 'L' | 'OT' | 'T')[]>();
   for (const t of teams) last10Queue.set(t.name, []);
 
   const allBoxScores: BoxScore[] = [];
@@ -63,7 +71,8 @@ export function simulateSeason(
     // ── Standings ─────────────────────────────────────────────────────────
     const homeGoals = box.home.goalsByPeriod.reduce((s, n) => s + n, 0);
     const awayGoals = box.away.goalsByPeriod.reduce((s, n) => s + n, 0);
-    const isOT = box.finalLabel !== 'FINAL';
+    const isTie = box.finalLabel === 'FINAL / TIE';
+    const isOT  = box.finalLabel === 'FINAL / OT';
 
     const hRec = standings.get(sg.homeTeam)!;
     const aRec = standings.get(sg.awayTeam)!;
@@ -71,16 +80,22 @@ export function simulateSeason(
     hRec.gp++; hRec.gf += homeGoals; hRec.ga += awayGoals;
     aRec.gp++; aRec.gf += awayGoals; aRec.ga += homeGoals;
 
-    if (homeGoals > awayGoals) {
+    if (isTie) {
+      // Both teams get 1 point; no winner
+      hRec.t++; hRec.pts++;
+      aRec.t++; aRec.pts++;
+      pushStreak(last10Queue, hRec, 'T');
+      pushStreak(last10Queue, aRec, 'T');
+    } else if (homeGoals > awayGoals) {
       hRec.w++; hRec.pts += 2;
-      aRec.l += isOT ? 0 : 1;
       if (isOT) { aRec.otl++; aRec.pts++; }
+      else       { aRec.l++; }
       pushStreak(last10Queue, hRec, 'W');
       pushStreak(last10Queue, aRec, isOT ? 'OT' : 'L');
     } else {
       aRec.w++; aRec.pts += 2;
-      hRec.l += isOT ? 0 : 1;
       if (isOT) { hRec.otl++; hRec.pts++; }
+      else       { hRec.l++; }
       pushStreak(last10Queue, aRec, 'W');
       pushStreak(last10Queue, hRec, isOT ? 'OT' : 'L');
     }
@@ -179,9 +194,9 @@ export function simulateSeason(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function pushStreak(
-  queues: Map<string, ('W'|'L'|'OT')[]>,
+  queues: Map<string, ('W'|'L'|'OT'|'T')[]>,
   rec: TeamSeasonRecord,
-  result: 'W' | 'L' | 'OT',
+  result: 'W' | 'L' | 'OT' | 'T',
 ) {
   // Update streak string
   const prev = rec.streak;
@@ -203,5 +218,6 @@ function pushStreak(
     w:   queue.filter(r => r === 'W').length,
     l:   queue.filter(r => r === 'L').length,
     otl: queue.filter(r => r === 'OT').length,
+    t:   queue.filter(r => r === 'T').length,
   };
 }

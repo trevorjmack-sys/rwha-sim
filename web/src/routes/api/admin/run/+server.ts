@@ -40,8 +40,13 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   // Run each game sequentially (keeps D1 writes clean)
   const results = [];
   for (const gameId of gameIds) {
-    const result = await runGame(db, gameId, seasonId);
-    results.push(result);
+    try {
+      const result = await runGame(db, gameId, seasonId);
+      results.push(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return json({ games: results, error: `Game ${gameId} failed: ${msg}` }, { status: 500 });
+    }
   }
 
   return json({ games: results });

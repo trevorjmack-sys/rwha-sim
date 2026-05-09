@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { getTeamPlayers, getActiveSeasonId } from '$lib/server/db';
+import type { PlayerRow } from '$lib/server/db';
 
 export const load: PageServerLoad = async ({ locals, platform }) => {
   const db = platform?.env.DB;
@@ -9,7 +10,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
   const seasonId = await getActiveSeasonId(db) ?? 1;
   const teamId   = locals.user!.teamId;
 
-  const [players, nextGameRow] = await Promise.all([
+  const [players, nextGameRow, skaterGpRows, goalieGpRows] = await Promise.all([
     getTeamPlayers(db, teamId),
     db.prepare(`
       SELECT sg.week, sg.home_team_id,
@@ -26,6 +27,20 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
       week: number; home_team_id: number;
       home_name: string; away_name: string;
     }>(),
+
+    db.prepare(`
+      SELECT player_id, COUNT(*) AS gp FROM skater_game_stats
+      WHERE game_id IN (SELECT id FROM scheduled_games WHERE season_id = ?)
+        AND team_id = ?
+      GROUP BY player_id
+    `).bind(seasonId, teamId).all<{ player_id: number; gp: number }>(),
+
+    db.prepare(`
+      SELECT player_id, COUNT(*) AS gp FROM goalie_game_stats
+      WHERE game_id IN (SELECT id FROM scheduled_games WHERE season_id = ?)
+        AND team_id = ?
+      GROUP BY player_id
+    `).bind(seasonId, teamId).all<{ player_id: number; gp: number }>(),
   ]);
 
   const nextGame = nextGameRow ? {
@@ -35,7 +50,11 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
       ? nextGameRow.away_name : nextGameRow.home_name,
   } : null;
 
-  return { players, nextGame };
+  const playerGp: Record<number, number> = {};
+  for (const r of skaterGpRows.results) playerGp[r.player_id] = r.gp;
+  for (const r of goalieGpRows.results) playerGp[r.player_id] = r.gp;
+
+  return { players, nextGame, playerGp };
 };
 
 export const actions: Actions = {

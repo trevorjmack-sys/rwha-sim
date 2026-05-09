@@ -11,7 +11,7 @@
 import type {
   Team, Lines, Skater, Goalie, BoxScore, GoalEvent, PenaltyEvent,
   FightEvent, SkaterStatLine, GoalieStatLine, TeamGameTotals, ThreeStar,
-  Strength,
+  Strength, PPUnit, PKUnit,
 } from './types.ts';
 import { generateLines } from './lines.ts';
 import { makeRng, type RNG } from './rng.ts';
@@ -20,9 +20,10 @@ export interface SimOptions {
   seed?: number;
   gameId?: number;
   week?: number;
-  // GMs may eventually pass overrides here (custom lines, overrides on TOI).
   homeLines?: Lines;
   awayLines?: Lines;
+  /** Rivalry intensity 0–5 between these two teams. Boosts fight rate and PIM. */
+  rivalryLevel?: number;
 }
 
 const PERIOD_LENGTH = 20 * 60; // seconds
@@ -91,30 +92,39 @@ export function simulateGame(
   const seed = opts.seed ?? Math.floor(Math.random() * 0x7fffffff);
   const rng  = makeRng(seed);
 
-  const homeLines = opts.homeLines ?? generateLines(home);
-  const awayLines = opts.awayLines ?? generateLines(away);
+  const homeLines    = opts.homeLines ?? generateLines(home);
+  const awayLines    = opts.awayLines ?? generateLines(away);
+  const rivalryLevel = opts.rivalryLevel ?? 0;  // 0 = no rivalry, 5 = max
 
   // ── Team-level scoring rates ──────────────────────────────────────────────
   // teamOffense() returns a raw score ~6.5 for a typical RWHA team.
   // teamDefense() returns a raw score ~2.1 for a typical RWHA team.
   // We normalize both so that an average matchup → ratio ≈ 1.0, then scale
-  // to the calibration target of ~10 SOG per period (30/game per team).
-  const OFF_NORM = 6.5;  // TUNE: empirical avg teamOffense() across RWHA
-  const DEF_NORM = 2.1;  // TUNE: empirical avg teamDefense() across RWHA
-  const SOG_BASE = 10;   // TUNE: target avg SOG per period per team
+  // to the calibration target of ~8 SOG per period (24/game per team).
+  //
+  // The ratio is raised to the power of SOG_CURVE (>1) so that quality gaps
+  // between teams amplify more than linearly — a strong offense vs weak
+  // defense generates meaningfully more shots than a flat 1:1 scale would.
+  const OFF_NORM  = 6.5;  // TUNE: empirical avg teamOffense() across RWHA
+  const DEF_NORM  = 2.1;  // TUNE: empirical avg teamDefense() across RWHA
+  const SOG_BASE  = 8;    // TUNE: target avg SOG per period per team (~24/game)
+  const SOG_CURVE = 1.4;  // TUNE: exponent that widens quality-gap spread
 
   const homeOff = teamOffense(home, homeLines);
   const awayOff = teamOffense(away, awayLines);
   const homeDef = teamDefense(home, homeLines);
   const awayDef = teamDefense(away, awayLines);
 
-  // Shots on goal per period: Poisson(BASE × offNorm / defNorm)
-  // Average matchup → lambda ≈ SOG_BASE; strong-vs-weak shifts it ±20-30%.
+  // Shots on goal per period: Poisson(BASE × ratio^CURVE)
+  // Average matchup → lambda = SOG_BASE; strong-vs-weak shifts more aggressively.
+  const sogLambda = (off: number, def: number) =>
+    SOG_BASE * Math.pow((off / OFF_NORM) / (def / DEF_NORM), SOG_CURVE);
+
   const sogHomePer: number[] = [];
   const sogAwayPer: number[] = [];
   for (let p = 0; p < 3; p++) {
-    sogHomePer.push(rng.poisson(SOG_BASE * (homeOff / OFF_NORM) / (awayDef / DEF_NORM)));
-    sogAwayPer.push(rng.poisson(SOG_BASE * (awayOff / OFF_NORM) / (homeDef / DEF_NORM)));
+    sogHomePer.push(rng.poisson(sogLambda(homeOff, awayDef)));
+    sogAwayPer.push(rng.poisson(sogLambda(awayOff, homeDef)));
   }
 
   // Goals per period — derive from shots × per-shot conversion (TUNE)
@@ -124,18 +134,40 @@ export function simulateGame(
   const goalsHomePer: number[] = sogHomePer.map(s => goalsFromShots(s, awaySavePct, rng));
   const goalsAwayPer: number[] = sogAwayPer.map(s => goalsFromShots(s, homeSavePct, rng));
 
-  // ── Overtime / shootout handling ──────────────────────────────────────────
-  let homeTotal = goalsHomePer.reduce((a, b) => a + b, 0);
-  let awayTotal = goalsAwayPer.reduce((a, b) => a + b, 0);
+  // ── Special teams (PP) ────────────────────────────────────────────────────
+  // Each team draws 2-5 PP opportunities per game (avg 3.5, close to NHL ~3.4).
+  const homeOppCount = rng.int(2, 5);
+  const awayOppCount = rng.int(2, 5);
+
+  const homePPGoals = (homeLines.pp && awayLines.pk)
+    ? ppGoalCount(homeLines.pp[0], awayLines.pk[0], awayLines.starter, homeOppCount, rng)
+    : 0;
+  const awayPPGoals = (awayLines.pp && homeLines.pk)
+    ? ppGoalCount(awayLines.pp[0], homeLines.pk[0], homeLines.starter, awayOppCount, rng)
+    : 0;
+
+  // Distribute PP goals across the three regulation periods
+  const homePPPerPeriod = [0, 0, 0];
+  const awayPPPerPeriod = [0, 0, 0];
+  for (let i = 0; i < homePPGoals; i++) homePPPerPeriod[rng.int(0, 2)]!++;
+  for (let i = 0; i < awayPPGoals; i++) awayPPPerPeriod[rng.int(0, 2)]!++;
+
+  // Combined period totals (EV + PP) used for box score and score tracking
+  const homeTotalPerPeriod = goalsHomePer.map((g, i) => g + homePPPerPeriod[i]!);
+  const awayTotalPerPeriod = goalsAwayPer.map((g, i) => g + awayPPPerPeriod[i]!);
+
+  // ── Overtime handling (beer league: no shootout — tie after OT) ─────────────
+  let homeTotal = homeTotalPerPeriod.reduce((a, b) => a + b, 0);
+  let awayTotal = awayTotalPerPeriod.reduce((a, b) => a + b, 0);
   let finalLabel: BoxScore['finalLabel'] = 'FINAL';
   let otGoalEvent: { time: number; teamHome: boolean } | null = null;
-  let shootout: { winnerHome: boolean } | null = null;
-  let sogHomeOt = 0, sogAwayOt = 0;
+  let sogHomeOt = 0;
+  let sogAwayOt = 0;
 
   if (homeTotal === awayTotal) {
-    // 5-min 3v3 OT — short, high-pace, ~3 SOG per side
-    sogHomeOt = rng.poisson(3 * (homeOff / awayDef));
-    sogAwayOt = rng.poisson(3 * (awayOff / homeDef));
+    // 5-min sudden-death OT — high-pace, ~4 SOG per side
+    sogHomeOt = rng.poisson(4 * Math.pow((homeOff / OFF_NORM) / (awayDef / DEF_NORM), SOG_CURVE));
+    sogAwayOt = rng.poisson(4 * Math.pow((awayOff / OFF_NORM) / (homeDef / DEF_NORM), SOG_CURVE));
     const otGoalsHome = goalsFromShots(sogHomeOt, awaySavePct, rng);
     const otGoalsAway = goalsFromShots(sogAwayOt, homeSavePct, rng);
 
@@ -148,20 +180,13 @@ export function simulateGame(
       awayTotal += 1;
       finalLabel = 'FINAL / OT';
     } else if (otGoalsHome > 0 && otGoalsAway > 0) {
-      // Both scored — earliest time wins. Phase-1 simplification: home wins.
+      // Both scored simultaneously — home team wins (rare edge case)
       otGoalEvent = { time: rng.int(10, OT_LENGTH - 10), teamHome: true };
       homeTotal += 1;
       finalLabel = 'FINAL / OT';
     } else {
-      // No OT goal — go to shootout. Winner = higher PS skater, with noise.
-      const homePs = avg(home.proSkaters.slice(0, 9), s => s.attrs.ps);
-      const awayPs = avg(away.proSkaters.slice(0, 9), s => s.attrs.ps);
-      const homeWeight = homePs + rng.normal(0, 8);
-      const awayWeight = awayPs + rng.normal(0, 8);
-      const winnerHome = homeWeight >= awayWeight;
-      shootout = { winnerHome };
-      if (winnerHome) homeTotal += 1; else awayTotal += 1;
-      finalLabel = 'FINAL / SO';
+      // No goal in OT — tie. Both teams get 1 point. Very beer league.
+      finalLabel = 'FINAL / TIE';
     }
   }
 
@@ -170,6 +195,13 @@ export function simulateGame(
   for (let p = 0; p < 3; p++) {
     addPeriodGoals(goals, p + 1, goalsHomePer[p]!, true,  home, homeLines, away, rng);
     addPeriodGoals(goals, p + 1, goalsAwayPer[p]!, false, away, awayLines, home, rng);
+    // PP goal events
+    if (homePPPerPeriod[p]! > 0 && homeLines.pp?.[0]) {
+      addPPPeriodGoals(goals, p + 1, homePPPerPeriod[p]!, home, homeLines.pp[0], rng);
+    }
+    if (awayPPPerPeriod[p]! > 0 && awayLines.pp?.[0]) {
+      addPPPeriodGoals(goals, p + 1, awayPPPerPeriod[p]!, away, awayLines.pp[0], rng);
+    }
   }
   if (otGoalEvent) {
     const team = otGoalEvent.teamHome ? home : away;
@@ -181,14 +213,15 @@ export function simulateGame(
   // Mark game-winning goal (last go-ahead goal)
   markGameWinner(goals, homeTotal, awayTotal, home.name, away.name);
 
-  // ── Penalties (Phase 1: ~3 per team, not yet wired into PP/SH goals) ──────
+  // ── Penalties (~3-5 per team; rivalry adds extra chippy play) ────────────
+  const basePenalties = 3 + Math.round(rivalryLevel * 0.4);  // 3 → 5 at max rivalry
   const penalties: PenaltyEvent[] = [
-    ...generatePenalties(home, homeLines, rng, 3),
-    ...generatePenalties(away, awayLines, rng, 3),
+    ...generatePenalties(home, homeLines, rng, basePenalties),
+    ...generatePenalties(away, awayLines, rng, basePenalties),
   ];
 
-  // ── Fights ────────────────────────────────────────────────────────────────
-  const fights: FightEvent[] = generateFights(home, homeLines, away, awayLines, rng);
+  // ── Fights (beer league: frequent; rivalry cranks it up further) ─────────
+  const fights: FightEvent[] = generateFights(home, homeLines, away, awayLines, rng, rivalryLevel);
 
   // ── Per-skater stats ──────────────────────────────────────────────────────
   const skaters: SkaterStatLine[] = [];
@@ -204,19 +237,21 @@ export function simulateGame(
   const sogAwayTotal = sogAwayPer.reduce((a, b) => a + b, 0) + sogAwayOt;
   const goalies: GoalieStatLine[] = [
     goalieLine(homeLines.starter, home.name, sogAwayTotal, awayTotal,
-               homeTotal > awayTotal ? 'W' : finalLabel.includes('OT') || finalLabel.includes('SO') ? 'OT' : 'L'),
+               homeTotal > awayTotal ? 'W' : finalLabel !== 'FINAL' ? 'OT' : 'L'),
     goalieLine(awayLines.starter, away.name, sogHomeTotal, homeTotal,
-               awayTotal > homeTotal ? 'W' : finalLabel.includes('OT') || finalLabel.includes('SO') ? 'OT' : 'L'),
+               awayTotal > homeTotal ? 'W' : finalLabel !== 'FINAL' ? 'OT' : 'L'),
   ];
 
   // ── Team totals ───────────────────────────────────────────────────────────
   const homeTotals: TeamGameTotals = teamTotals(
-    home.name, goalsHomePer, sogHomePer, otGoalEvent?.teamHome ? 1 : 0, sogHomeOt,
+    home.name, homeTotalPerPeriod, sogHomePer, otGoalEvent?.teamHome ? 1 : 0, sogHomeOt,
     skaters.filter(s => s.team === home.name), penalties.filter(p => p.team === home.name),
+    homePPGoals, homeOppCount,
   );
   const awayTotals: TeamGameTotals = teamTotals(
-    away.name, goalsAwayPer, sogAwayPer, otGoalEvent && !otGoalEvent.teamHome ? 1 : 0, sogAwayOt,
+    away.name, awayTotalPerPeriod, sogAwayPer, otGoalEvent && !otGoalEvent.teamHome ? 1 : 0, sogAwayOt,
     skaters.filter(s => s.team === away.name), penalties.filter(p => p.team === away.name),
+    awayPPGoals, awayOppCount,
   );
 
   // ── Three stars (top points; goalie wins steal #1 on shutouts) ────────────
@@ -257,11 +292,10 @@ function teamDefense(team: Team, lines: Lines): number {
 }
 
 function goalieSavePct(g: Goalie): number {
-  // TUNE: collapse SC/RT/AG/SK/SZ/HS into a save probability around .905
-  // Phase 1: simple linear map from OV.
-  //   OV 60 → .880,  OV 80 → .903,  OV 90 → .915
-  // (calibrated so league-avg SV% ≈ .905)
-  const base = 0.880 + (g.ov - 60) / 30 * 0.035;
+  // TUNE: linear map from OV; wider range makes goalie quality matter more.
+  //   OV 60 → .875,  OV 75 → .900,  OV 80 → .908,  OV 90 → .925
+  // (calibrated so league-avg SV% ≈ .908, close to NHL .906)
+  const base = 0.875 + (g.ov - 60) / 30 * 0.050;
   return Math.min(0.935, Math.max(0.850, base));
 }
 
@@ -280,6 +314,32 @@ function addPeriodGoals(
   for (let i = 0; i < count; i++) {
     const sec = rng.int(10, PERIOD_LENGTH - 10);
     goals.push(pickGoal(team, lines, rng, period, fmtTime(sec), 'EV'));
+  }
+}
+
+function addPPPeriodGoals(
+  goals: GoalEvent[], period: number, count: number,
+  team: Team, ppUnit: PPUnit, rng: RNG,
+): void {
+  const candidates = [ppUnit.lw, ppUnit.c, ppUnit.rw, ppUnit.ld, ppUnit.rd];
+  for (let i = 0; i < count; i++) {
+    const sec = rng.int(10, PERIOD_LENGTH - 10);
+    // Scorer weighted by SC (D weighted less)
+    const scWeights = candidates.map((s, idx) => s.attrs.sc * (idx >= 3 ? 0.4 : 1.0));
+    const scorerIdx = rng.weighted(scWeights);
+    const scorer = candidates[scorerIdx]!;
+    const others = candidates.filter((_, j) => j !== scorerIdx);
+    const numAssists = rng.weighted([10, 30, 60]);
+    const assists: string[] = [];
+    const usedIdx = new Set<number>();
+    for (let j = 0; j < numAssists && others.length > 0; j++) {
+      const paWeights = others.map((s, idx) => usedIdx.has(idx) ? 0 : s.attrs.pa);
+      const idx = rng.weighted(paWeights);
+      if (paWeights[idx] === 0) break;
+      usedIdx.add(idx);
+      assists.push(others[idx]!.name);
+    }
+    goals.push({ period, time: fmtTime(sec), team: team.name, scorer: scorer.name, assists, strength: 'PP' });
   }
 }
 
@@ -343,19 +403,58 @@ function generatePenalties(team: Team, lines: Lines, rng: RNG, count: number): P
   return out;
 }
 
-function generateFights(home: Team, hl: Lines, away: Team, al: Lines, rng: RNG): FightEvent[] {
-  // Phase 1: ~50% chance of one fight per game, picked from the highest-FG skaters
-  if (!rng.bool(0.5)) return [];
-  const homeFighter = [...flatSkaters(hl)].map(x => x.skater).sort((a, b) => b.attrs.fg - a.attrs.fg)[0]!;
-  const awayFighter = [...flatSkaters(al)].map(x => x.skater).sort((a, b) => b.attrs.fg - a.attrs.fg)[0]!;
-  const period = rng.int(1, 3);
-  const sec = rng.int(60, PERIOD_LENGTH - 60);
-  // Outcome by ST + FG
-  const hWeight = homeFighter.attrs.fg + homeFighter.attrs.st + rng.normal(0, 10);
-  const aWeight = awayFighter.attrs.fg + awayFighter.attrs.st + rng.normal(0, 10);
-  const diff = hWeight - aWeight;
-  const outcome: FightEvent['outcome'] = Math.abs(diff) < 5 ? 'draw' : diff > 0 ? 'home' : 'away';
-  return [{ period, time: fmtTime(sec), homePlayer: homeFighter.name, awayPlayer: awayFighter.name, outcome }];
+function generateFights(
+  home: Team, hl: Lines, away: Team, al: Lines, rng: RNG,
+  rivalryLevel = 0,
+): FightEvent[] {
+  // Beer league: fights are common. Base ~75% chance of at least one fight.
+  // Rivalry adds more: level 5 → near-certain multiple fights.
+  // Each "roll" has a base probability; we roll until we miss.
+  const BASE_FIGHT_PROB = 0.75;
+  const RIVALRY_BOOST   = rivalryLevel * 0.05;  // +5% per level
+
+  const homeSkaters = [...flatSkaters(hl)].map(x => x.skater);
+  const awaySkaters = [...flatSkaters(al)].map(x => x.skater);
+
+  // Weight fighters by FG attribute — high-FG guys scrap more
+  const pickFighter = (skaters: Skater[]) => {
+    const weights = skaters.map(s => Math.max(1, s.attrs.fg));
+    return skaters[rng.weighted(weights)]!;
+  };
+
+  const fights: FightEvent[] = [];
+  let prob = BASE_FIGHT_PROB + RIVALRY_BOOST;
+
+  while (rng.bool(Math.min(0.95, prob))) {
+    const homeFighter = pickFighter(homeSkaters);
+    const awayFighter = pickFighter(awaySkaters);
+    const period = rng.int(1, 3);
+    const sec    = rng.int(60, PERIOD_LENGTH - 60);
+
+    const hWeight = homeFighter.attrs.fg + homeFighter.attrs.st + rng.normal(0, 10);
+    const aWeight = awayFighter.attrs.fg + awayFighter.attrs.st + rng.normal(0, 10);
+    const diff = hWeight - aWeight;
+    const outcome: FightEvent['outcome'] = Math.abs(diff) < 5 ? 'draw' : diff > 0 ? 'home' : 'away';
+
+    // Game misconduct: ~30% base chance per fighter, higher for instigators
+    // (loser or aggressor more likely to get the GM)
+    const homeGM = rng.bool(outcome === 'away' ? 0.45 : 0.20);
+    const awayGM = rng.bool(outcome === 'home' ? 0.45 : 0.20);
+
+    fights.push({
+      period, time: fmtTime(sec),
+      homePlayer: homeFighter.name,
+      awayPlayer: awayFighter.name,
+      outcome,
+      homeGameMisconduct: homeGM || undefined,
+      awayGameMisconduct: awayGM || undefined,
+    });
+
+    // Decrease probability for subsequent fights in the same game
+    prob *= 0.45;
+  }
+
+  return fights;
 }
 
 function skaterLine(
@@ -404,10 +503,47 @@ function goalieLine(g: Goalie, teamName: string, sa: number, ga: number,
   };
 }
 
+// ── Power-play simulation ─────────────────────────────────────────────────────
+// Returns the number of PP goals scored given the attacking PP unit, the
+// defending PK unit, the defending starter, and a number of opportunities.
+//
+// Base PP% ≈ 0.185 (close to NHL league average).
+// Adjusted by:
+//   ppStrength  = avg (pa + sc) of the 3 PP forwards, normalised to 75
+//   pkStrength  = avg (di + df) of the 4 PK skaters, normalised to 75
+//   goalieQual  = avg (ag + rb + rt) of the defending starter, normalised to 75
+//
+// Resulting PP% is clamped to [0.05, 0.40] to prevent wild outliers.
+
+const BASE_PP_PCT = 0.185;
+
+function ppGoalCount(
+  ppUnit: PPUnit,
+  pkUnit: PKUnit,
+  goalie: Goalie,
+  opps: number,
+  rng: RNG,
+): number {
+  const attr = (s: Skater, ...keys: string[]) =>
+    keys.reduce((t, k) => t + (s.attrs[k] ?? 50), 0) / keys.length;
+
+  const ppOff = (attr(ppUnit.lw, 'pa', 'sc') + attr(ppUnit.c, 'pa', 'sc') + attr(ppUnit.rw, 'pa', 'sc')) / (3 * 75);
+  const pkDef = (attr(pkUnit.lf, 'di', 'df') + attr(pkUnit.rf, 'di', 'df') +
+                 attr(pkUnit.ld, 'di', 'df') + attr(pkUnit.rd, 'di', 'df')) / (4 * 75);
+  const gqual  = ((goalie.attrs.ag ?? 50) + (goalie.attrs.rb ?? 50) + (goalie.attrs.rt ?? 50)) / (3 * 75);
+
+  const pct = Math.min(0.40, Math.max(0.05, BASE_PP_PCT * (ppOff / pkDef) * (1 / gqual)));
+
+  let goals = 0;
+  for (let i = 0; i < opps; i++) if (rng.bool(pct)) goals++;
+  return goals;
+}
+
 function teamTotals(
   teamName: string, goalsByPeriod: number[], sogByPeriod: number[],
   otGoals: number, otSog: number,
   skaters: SkaterStatLine[], penalties: PenaltyEvent[],
+  ppGoals: number, ppOpps: number,
 ): TeamGameTotals {
   const periods = otSog > 0 ? [...goalsByPeriod, otGoals] : goalsByPeriod;
   const sogs    = otSog > 0 ? [...sogByPeriod, otSog]    : sogByPeriod;
@@ -415,8 +551,8 @@ function teamTotals(
     team: teamName,
     goalsByPeriod: periods,
     sogByPeriod:   sogs,
-    ppGoals: 0, ppOpps: 3,        // TUNE: PP not yet modeled
-    faceoffsWon: 28, faceoffsTotal: 56, // TUNE: faceoff totals
+    ppGoals, ppOpps,
+    faceoffsWon: 28, faceoffsTotal: 56,
     hits:   skaters.reduce((s, x) => s + x.hits, 0),
     blocks: skaters.reduce((s, x) => s + x.blocks, 0),
     pim:    penalties.reduce((s, p) => s + p.minutes, 0),

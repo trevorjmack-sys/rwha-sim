@@ -16,7 +16,7 @@
 import { execSync }   from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { loadLeague }    from '../src/data.ts';
-import { generateSchedule } from '../src/schedule.ts';
+import { generateSchedule, type TeamEntry } from '../src/schedule.ts';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 const SEASON_NAME = '2025-26';
@@ -71,22 +71,34 @@ function buildSql(): string {
   let teamId   = 1;
   let playerId = 1;
 
+  // ── Conference / division assignments ────────────────────────────────────────
+  // Honey (1): Jofa + Titan  |  Sturdy (2): Cooper + CCM
+  // Adjustable post-seed via /admin/rivalries.
+  const DIVISION_MAP: Record<string, { conf: 1 | 2; div: string }> = {
+    Flyers:    { conf: 1, div: 'Jofa'   }, Giants:    { conf: 1, div: 'Jofa'   },
+    Warheads:  { conf: 1, div: 'Jofa'   }, Steamers:  { conf: 1, div: 'Jofa'   },
+    Riots:     { conf: 1, div: 'Jofa'   }, Meltdown:  { conf: 1, div: 'Jofa'   },
+    Marauders: { conf: 1, div: 'Titan'  }, WaffleBots:{ conf: 1, div: 'Titan'  },
+    Snowdogs:  { conf: 1, div: 'Titan'  }, Oilers:    { conf: 1, div: 'Titan'  },
+    Bunnies:   { conf: 1, div: 'Titan'  },
+    Aces:      { conf: 2, div: 'Cooper' }, Chiefs:    { conf: 2, div: 'Cooper' },
+    Jets:      { conf: 2, div: 'Cooper' }, Gladiators:{ conf: 2, div: 'Cooper' },
+    Phantoms:  { conf: 2, div: 'Cooper' }, Mariners:  { conf: 2, div: 'Cooper' },
+    Clan:      { conf: 2, div: 'CCM'    }, Cunts:     { conf: 2, div: 'CCM'    },
+    Fletushkas:{ conf: 2, div: 'CCM'    }, Mongoloids:{ conf: 2, div: 'CCM'    },
+    Shitdawgs: { conf: 2, div: 'CCM'    },
+  };
+  const conf1Names = new Set(
+    Object.entries(DIVISION_MAP).filter(([, v]) => v.conf === 1).map(([k]) => k),
+  );
+
   out('-- Teams');
   for (const team of teams) {
     teamIdMap.set(team.name, teamId);
-    const isCommish = COMMISSIONER_EMAILS.has(team.gm.split('<')[1]?.replace('>', '') ?? '')
-      || team.gm.toLowerCase().includes('dean')
-      || team.gm.toLowerCase().includes('trevor')
-      ? 0 : 0;  // resolved below via email match
+    const { conf, div } = DIVISION_MAP[team.name] ?? { conf: 1, div: 'Jofa' };
 
-    // We can't know gm_email from the JSON — it's just gm_name there.
-    // We seed gm_email as a placeholder; the GM updates it on first login
-    // OR the commissioner sets it in /admin.  Dean and Trevor's teams are
-    // identified by matching against COMMISSIONER_EMAILS at setup time.
-    // For now: leave gm_email as empty; the commissioner can fill it in
-    // via the admin UI.  is_commissioner is set for the two known teams below.
-    out(`INSERT INTO teams (id, season_id, name, gm_name, gm_email, farm_name, is_commissioner)`);
-    out(`  VALUES (${teamId}, 1, ${esc(team.name)}, ${esc(team.gm)}, '', ${esc(team.farmName)}, 0);`);
+    out(`INSERT INTO teams (id, season_id, name, gm_name, gm_email, farm_name, is_commissioner, conference, division)`);
+    out(`  VALUES (${teamId}, 1, ${esc(team.name)}, ${esc(team.gm)}, '', ${esc(team.farmName)}, 0, ${conf}, ${esc(div)});`);
     teamId++;
   }
   out('');
@@ -121,9 +133,12 @@ function buildSql(): string {
   out('');
 
   // ── Schedule ──────────────────────────────────────────────────────────────
-  out('-- Schedule (82 games per team, 902 total)');
-  const teamNames = teams.map(t => t.name);
-  const schedule  = generateSchedule(teamNames, SCHEDULE_SEED);
+  out('-- Schedule (41 games per team, 451 total)');
+  const teamEntries: TeamEntry[] = teams.map(t => ({
+    name:       t.name,
+    conference: (conf1Names.has(t.name) ? 1 : 2) as 1 | 2,
+  }));
+  const schedule = generateSchedule(teamEntries, SCHEDULE_SEED);
 
   let gameId = 1;
   for (const g of schedule) {

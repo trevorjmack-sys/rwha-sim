@@ -11,7 +11,9 @@
     { href: '/leaders',  label: 'Leaders'   },
     { href: '/power',    label: 'Power'     },
     { href: '/finance',  label: 'Finance'   },
-    { href: '/rosters',  label: 'Rosters'   },
+    { href: '/rosters',   label: 'Rosters'    },
+    { href: '/prospects', label: 'Prospects'  },
+    { href: '/trades',    label: 'Trades'     },
   ];
 
   let menuOpen    = false;
@@ -29,7 +31,15 @@
   $: teamsActive = $page.url.pathname.startsWith('/teams');
 
   $: teamNames = data.teamNames ?? [];
+  $: myTeamLabel = data.user?.teamName ?? 'My Team';
 </script>
+
+<svelte:head>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <script async src="https://analytics.umami.is/script.js" data-website-id="a606c91c-965a-49fb-aad4-9d4a6a47c480"></script>
+</svelte:head>
 
 <div class="min-h-screen flex flex-col">
   <!-- ── Header ──────────────────────────────────────────────────────────────── -->
@@ -95,13 +105,13 @@
 
       <!-- Desktop right side — hidden on mobile -->
       <div class="hidden md:flex ml-auto items-center gap-4 shrink-0">
-        <a href="/gm"    class="nav-link" class:active={$page.url.pathname.startsWith('/gm')}>My Team</a>
+        <a href="/gm"    class="nav-link" class:active={$page.url.pathname.startsWith('/gm')}>{myTeamLabel}</a>
         <a href="/admin" class="nav-link text-rwha-red">⚡ Admin</a>
       </div>
 
       <!-- Mobile right side: My Team + hamburger -->
       <div class="flex md:hidden ml-auto items-center gap-4">
-        <a href="/gm" class="nav-link text-xs" class:active={$page.url.pathname.startsWith('/gm')}>My Team</a>
+        <a href="/gm" class="nav-link text-xs" class:active={$page.url.pathname.startsWith('/gm')}>{myTeamLabel}</a>
 
         <button
           on:click={() => menuOpen = !menuOpen}
@@ -159,6 +169,9 @@
             </div>
           {/if}
 
+          <a href="/gm" class="py-3 border-b border-rwha-border/30 font-mono text-sm transition-colors
+                     {$page.url.pathname.startsWith('/gm') ? 'text-rwha-amber' : 'text-rwha-muted hover:text-rwha-text'}"
+          >{myTeamLabel}</a>
           <a href="/admin" class="py-3 font-mono text-sm text-rwha-red">⚡ Admin</a>
         </nav>
       </div>

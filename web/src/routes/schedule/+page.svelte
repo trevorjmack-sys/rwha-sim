@@ -28,6 +28,13 @@
     return `/teams/${name.toLowerCase()}`;
   }
 
+  function rivalryIcon(level: number): string {
+    if (level <= 0) return '';
+    if (level <= 2) return '🔥';
+    if (level <= 4) return '💢';
+    return '☠️';
+  }
+
   $: prev = data.weeks.find(w => w.week === data.week - 1);
   $: next = data.weeks.find(w => w.week === data.week + 1);
   $: currentWeekInfo = data.weeks.find(w => w.week === data.week);
@@ -110,7 +117,9 @@
                 {g.home_name}
               </a>
             </td>
-            <td class="text-rwha-border text-xs text-center">vs</td>
+            <td class="text-rwha-border text-xs text-center">
+              vs{#if g.rivalryLevel > 0}<span class="ml-1" title="Rivalry (level {g.rivalryLevel})">{rivalryIcon(g.rivalryLevel)}</span>{/if}
+            </td>
             <!-- Away -->
             <td class="font-semibold">
               <a href={teamHref(g.away_name)}
@@ -152,5 +161,9 @@
   <span><span class="text-rwha-amber">●</span> All complete</span>
   <span><span class="text-rwha-amber/40">●</span> In progress</span>
   <span><span class="text-rwha-muted">●</span> Upcoming</span>
+  <span class="text-rwha-border">·</span>
+  <span>🔥 Rivalry</span>
+  <span>💢 Intense rivalry</span>
+  <span>☠️ Historic rivals</span>
   <span class="ml-auto">Click a team name to see their full schedule</span>
 </div>

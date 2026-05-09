@@ -5,6 +5,13 @@
   $: prev = data.playedWeeks[data.playedWeeks.indexOf(data.week) - 1] ?? null;
   $: next = data.playedWeeks[data.playedWeeks.indexOf(data.week) + 1] ?? null;
 
+  function rivalryIcon(level: number): string {
+    if (level <= 0) return '';
+    if (level <= 2) return '🔥';
+    if (level <= 4) return '💢';
+    return '☠️';
+  }
+
   function winner(hg: number | null, ag: number | null, side: 'home' | 'away') {
     if (hg == null || ag == null) return '';
     if (side === 'home') return hg > ag ? 'text-rwha-amber font-bold' : 'text-rwha-muted';
@@ -57,7 +64,7 @@
             </a>
           </div>
 
-          <!-- Score -->
+          <!-- Score / rivalry -->
           <div class="w-24 text-center shrink-0">
             {#if g.status === 'complete' && g.home_goals != null}
               <div class="flex items-center justify-center gap-1.5 font-mono">
@@ -67,9 +74,14 @@
               </div>
               <div class="text-rwha-muted text-xs font-mono mt-0.5">
                 {g.final_label?.replace('FINAL', '').trim() || ''}
+                {#if g.rivalryLevel > 0}
+                  <span title="Rivalry game (level {g.rivalryLevel})">{rivalryIcon(g.rivalryLevel)}</span>
+                {/if}
               </div>
             {:else}
-              <span class="text-rwha-muted font-mono text-sm">vs</span>
+              <span class="text-rwha-muted font-mono text-sm">
+                vs{#if g.rivalryLevel > 0}<span class="ml-1" title="Rivalry game (level {g.rivalryLevel})">{rivalryIcon(g.rivalryLevel)}</span>{/if}
+              </span>
             {/if}
           </div>
 

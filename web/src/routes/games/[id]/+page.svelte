@@ -158,6 +158,54 @@
   </div>
 {/if}
 
+<!-- ── Fights ────────────────────────────────────────────────────────────────── -->
+{#if data.fights.length > 0}
+  <div class="section-header">Fights</div>
+  <div class="card mb-5 divide-y divide-rwha-border/40">
+    {#each data.fights as f}
+      <div class="flex items-center gap-2 px-4 py-2 text-sm font-mono flex-wrap">
+        <span class="text-rwha-muted w-6 text-right shrink-0">{pLabelNum(f.period)}</span>
+        <span class="text-rwha-muted w-10 shrink-0">{f.time}</span>
+        <!-- Home player -->
+        <span class="{f.outcome === 'home' ? 'text-rwha-amber font-semibold' : 'text-rwha-muted'}">
+          {f.homePlayer}
+        </span>
+        {#if f.homeGameMisconduct}
+          <span class="text-xs bg-rwha-red/20 text-rwha-red border border-rwha-red/40 rounded px-1 py-0 leading-4">EJECTED</span>
+        {/if}
+        <span class="text-rwha-border/60 shrink-0">vs</span>
+        <!-- Away player -->
+        <span class="{f.outcome === 'away' ? 'text-rwha-amber font-semibold' : 'text-rwha-muted'}">
+          {f.awayPlayer}
+        </span>
+        {#if f.awayGameMisconduct}
+          <span class="text-xs bg-rwha-red/20 text-rwha-red border border-rwha-red/40 rounded px-1 py-0 leading-4">EJECTED</span>
+        {/if}
+        {#if f.outcome === 'draw'}
+          <span class="text-xs bg-rwha-surface border border-rwha-border rounded px-1 py-0 leading-4 text-rwha-muted">DRW</span>
+        {/if}
+      </div>
+    {/each}
+  </div>
+{/if}
+
+<!-- ── Penalties ──────────────────────────────────────────────────────────────── -->
+{#if data.penalties.length > 0}
+  <div class="section-header">Penalties</div>
+  <div class="card mb-5 divide-y divide-rwha-border/40">
+    {#each data.penalties as pen}
+      <div class="flex items-baseline gap-2 px-4 py-2 text-sm font-mono">
+        <span class="text-rwha-muted w-6 text-right shrink-0">{pLabelNum(pen.period)}</span>
+        <span class="text-rwha-muted w-10 shrink-0">{pen.time}</span>
+        <span class="text-rwha-amber/80 w-12 shrink-0 uppercase">{pen.team.slice(0, 3)}</span>
+        <span class="text-rwha-text font-semibold">{pen.player}</span>
+        <span class="text-rwha-muted flex-1">{pen.infraction}</span>
+        <span class="text-rwha-muted shrink-0">{pen.minutes} min</span>
+      </div>
+    {/each}
+  </div>
+{/if}
+
 <!-- ── Three stars ─────────────────────────────────────────────────────────── -->
 {#if data.threeStars}
   <div class="section-header">Three Stars</div>

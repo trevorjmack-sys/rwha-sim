@@ -6,7 +6,23 @@ import type { D1Database }  from '@cloudflare/workers-types';
 import type { Team, Skater, Goalie, Lines } from '$engine/types';
 import { simulateGame }     from '$engine/sim';
 import { generateLines }    from '$engine/lines';
+import { makeRng, derive }  from '$engine/rng';
 import type { PlayerRow, TeamLinesRow } from './db';
+
+// ── Injury constants ──────────────────────────────────────────────────────────
+// Probability per game: 0.2% (du=99) → 1.0% (du=1).
+// Formula: BASE + RANGE * (99 - du) / 98
+const INJ_BASE  = 0.002;   // min injury prob per game (elite durability)
+const INJ_RANGE = 0.008;   // added prob at du=1 vs du=99
+
+// Severity tiers (weights: 50 / 30 / 15 / 5)
+// games missed = uniform draw within each tier's range [min, max]
+const INJ_TIERS: { w: number; min: number; max: number }[] = [
+  { w: 50, min: 1,  max: 3  },   // minor
+  { w: 30, min: 4,  max: 7  },   // moderate
+  { w: 15, min: 8,  max: 14 },   // significant
+  { w: 5,  min: 15, max: 30 },   // major
+];
 
 // ── Convert D1 rows → engine Team ────────────────────────────────────────────
 function rowToSkater(r: PlayerRow): Skater {
@@ -147,9 +163,17 @@ export async function runGame(
 
     if (linesRow && !linesRow.use_computer_lines && linesRow.lines_json) {
       const parsed = parseStoredLines(linesRow.lines_json, homeData.players.concat(awayData.players));
-      if (parsed) return parsed;
+      if (parsed) {
+        // Stored lines may not have PP/PK units yet — auto-generate them if absent
+        if (!parsed.pp || !parsed.pk) {
+          const autoLines = generateLines(team);
+          if (!parsed.pp) parsed.pp = autoLines.pp;
+          if (!parsed.pk) parsed.pk = autoLines.pk;
+        }
+        return parsed;
+      }
     }
-    // Default: auto-generate from OV
+    // Default: auto-generate from OV (always includes PP/PK)
     return generateLines(team);
   };
 
@@ -161,9 +185,20 @@ export async function runGame(
     loadLines(gameRow.away_team_id, awayTeam),
   ]);
 
-  // 4. Run the sim
+  // 4. Load rivalry level between these two teams (0 if none)
+  const rivalryRow = await db
+    .prepare(`
+      SELECT level FROM rivalries
+      WHERE (team_a_id = ? AND team_b_id = ?) OR (team_a_id = ? AND team_b_id = ?)
+    `)
+    .bind(gameRow.home_team_id, gameRow.away_team_id,
+          gameRow.away_team_id, gameRow.home_team_id)
+    .first<{ level: number }>();
+  const rivalryLevel = rivalryRow?.level ?? 0;
+
+  // 5. Run the sim
   const seed = Math.floor(Math.random() * 0x7fffffff);
-  const box  = simulateGame(homeTeam, awayTeam, { seed, gameId, homeLines, awayLines });
+  const box  = simulateGame(homeTeam, awayTeam, { seed, gameId, homeLines, awayLines, rivalryLevel });
 
   const homeGoals = box.home.goalsByPeriod.reduce((s, n) => s + n, 0);
   const awayGoals = box.away.goalsByPeriod.reduce((s, n) => s + n, 0);
@@ -208,8 +243,20 @@ export async function runGame(
     `).bind(gameId, player.id, teamId, g.decision, g.shotsAgainst, g.goalsAgainst, g.toi));
   }
 
-  // D1 batch — all writes in one round-trip
+  // D1 batch 1 — game results + per-player stats
   await db.batch(stmts);
+
+  // D1 batch 2 — injury tick-downs + new injury rolls (separate to stay under D1's 100-stmt limit)
+  const playedSkaterNames = new Set(box.skaters.map(s => s.name));
+  const playedGoalieNames = new Set(box.goalies.map(g => g.name));
+  const allPlayers = [...homeData.players, ...awayData.players];
+  const injuryStmts = buildInjuryStmts(db, allPlayers, playedSkaterNames, playedGoalieNames, seed);
+  if (injuryStmts.length > 0) await db.batch(injuryStmts);
+
+  // D1 batch 3 — suspension tick-downs + new suspensions from game misconducts
+  const suspensionStmts = buildSuspensionStmts(db, allPlayers, box.fights,
+    homeData.meta.name, awayData.meta.name);
+  if (suspensionStmts.length > 0) await db.batch(suspensionStmts);
 
   return {
     gameId,
@@ -221,6 +268,138 @@ export async function runGame(
     boxScore: box,
     seed,
   };
+}
+
+// ── Injury helpers ────────────────────────────────────────────────────────────
+
+/** Injury probability for a player with this durability rating (1–99). */
+function injuryProb(du: number): number {
+  const clamped = Math.max(1, Math.min(99, du));
+  return INJ_BASE + INJ_RANGE * (99 - clamped) / 98;
+}
+
+/**
+ * Roll injury checks + tick down existing injuries after a completed game.
+ * Returns D1 prepared statements to include in the batch.
+ *
+ * - Already-injured players on both rosters have their counter decremented by 1
+ *   (so their injury naturally expires game-by-game).
+ * - Players who appeared in the box score and are NOT already injured get a
+ *   du-based injury check. If they roll unlucky, they sit out 1–30 games.
+ *
+ * Uses a sub-RNG derived from the game seed so results are reproducible.
+ */
+function buildInjuryStmts(
+  db: D1Database,
+  allPlayers: PlayerRow[],
+  playedSkaterNames: Set<string>,
+  playedGoalieNames: Set<string>,
+  seed: number,
+): ReturnType<D1Database['prepare']>[] {
+  const rng   = makeRng(derive(seed, 'injuries'));
+  const stmts: ReturnType<D1Database['prepare']>[] = [];
+  const tierWeights = INJ_TIERS.map(t => t.w);
+
+  for (const player of allPlayers) {
+    const alreadyInjured = player.injured_games_remaining > 0;
+
+    if (alreadyInjured) {
+      // Tick down by 1 (min 0)
+      const newVal = player.injured_games_remaining - 1;
+      stmts.push(
+        db.prepare('UPDATE players SET injured_games_remaining = ? WHERE id = ?')
+          .bind(newVal, player.id),
+      );
+      continue;   // don't re-roll for already-injured players
+    }
+
+    // Only roll for players who actually appeared in this game
+    const played = player.is_goalie
+      ? playedGoalieNames.has(player.name)
+      : playedSkaterNames.has(player.name);
+    if (!played) continue;
+
+    let du = 50;  // fallback if attrs missing
+    try {
+      const attrs = typeof player.attrs === 'string'
+        ? JSON.parse(player.attrs)
+        : player.attrs;
+      if (typeof attrs?.du === 'number') du = attrs.du;
+    } catch { /* use fallback */ }
+
+    const prob = injuryProb(du);
+    if (!rng.bool(prob)) continue;   // no injury this game
+
+    // Pick severity tier, then a random number of games within that tier
+    const tierIdx    = rng.weighted(tierWeights);
+    const tier       = INJ_TIERS[tierIdx]!;
+    const gamesMissed = rng.int(tier.min, tier.max);
+
+    stmts.push(
+      db.prepare('UPDATE players SET injured_games_remaining = ? WHERE id = ?')
+        .bind(gamesMissed, player.id),
+    );
+  }
+
+  return stmts;
+}
+
+// ── Suspension helpers ────────────────────────────────────────────────────────
+
+/**
+ * Process game misconducts from fights into 1-game suspensions.
+ * Also tick down any existing suspensions by 1 for players who played today.
+ */
+function buildSuspensionStmts(
+  db: D1Database,
+  allPlayers: PlayerRow[],
+  fights: import('$engine/types').FightEvent[],
+  homeTeamName: string,
+  _awayTeamName: string,
+): ReturnType<D1Database['prepare']>[] {
+  const stmts: ReturnType<D1Database['prepare']>[] = [];
+
+  // Tick down existing suspensions for all players (min 0)
+  for (const player of allPlayers) {
+    if (player.suspended_games_remaining > 0) {
+      const newVal = player.suspended_games_remaining - 1;
+      stmts.push(
+        db.prepare('UPDATE players SET suspended_games_remaining = ? WHERE id = ?')
+          .bind(newVal, player.id),
+      );
+    }
+  }
+
+  // Issue new 1-game suspensions for game misconducts in this game
+  const byName = new Map(allPlayers.map(p => [p.name, p]));
+
+  for (const fight of fights) {
+    // homeGameMisconduct → home player is ejected and suspended 1 game
+    if (fight.homeGameMisconduct) {
+      const player = byName.get(fight.homePlayer);
+      if (player) {
+        stmts.push(
+          db.prepare('UPDATE players SET suspended_games_remaining = ? WHERE id = ?')
+            .bind(1, player.id),
+        );
+      }
+    }
+    // awayGameMisconduct → away player is ejected
+    if (fight.awayGameMisconduct) {
+      const player = byName.get(fight.awayPlayer);
+      if (player) {
+        stmts.push(
+          db.prepare('UPDATE players SET suspended_games_remaining = ? WHERE id = ?')
+            .bind(1, player.id),
+        );
+      }
+    }
+  }
+
+  // Suppress unused-var warning for homeTeamName (kept for future use)
+  void homeTeamName;
+
+  return stmts;
 }
 
 // ── Pick next N unplayed games for the current season ────────────────────────

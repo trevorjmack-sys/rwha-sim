@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getActiveSeasonId, getTeamSchedule } from '$lib/server/db';
 import type { RosterPlayer } from '../../rosters/+page.server';
-import type { TeamGameTotals } from '../../../../src/types';
+import type { TeamGameTotals } from '$engine/types';
 
 export const load: PageServerLoad = async ({ params, platform }) => {
   const db = platform?.env.DB;
@@ -12,15 +12,16 @@ export const load: PageServerLoad = async ({ params, platform }) => {
   const slug     = params.slug.toLowerCase();
 
   const team = await db.prepare(`
-    SELECT id, name, gm_name, farm_name
+    SELECT id, name, gm_name, farm_name, conference, division
     FROM teams WHERE season_id = ? AND LOWER(name) = ?
   `).bind(seasonId, slug).first<{
     id: number; name: string; gm_name: string; farm_name: string | null;
+    conference: number | null; division: string | null;
   }>();
 
   if (!team) throw error(404, `Team "${params.slug}" not found`);
 
-  const [games, playerRows, resultRows] = await Promise.all([
+  const [games, playerRows, resultRows, skaterStatRows, goalieStatRows] = await Promise.all([
     getTeamSchedule(db, seasonId, team.id),
 
     db.prepare(`
@@ -49,6 +50,49 @@ export const load: PageServerLoad = async ({ params, platform }) => {
       home_goals: number; away_goals: number;
       home_sog: number; away_sog: number;
       box_score_json: string;
+    }>(),
+
+    // Skater season stats for this team
+    db.prepare(`
+      SELECT p.id, p.name, p.position,
+             COUNT(*)          AS gp,
+             SUM(s.g)          AS g,
+             SUM(s.a)          AS a,
+             SUM(s.g + s.a)    AS pts,
+             SUM(s.plus_minus) AS plus_minus,
+             SUM(s.sog)        AS sog,
+             SUM(s.hits)       AS hits,
+             SUM(s.blocks)     AS blocks,
+             SUM(s.pim)        AS pim
+      FROM skater_game_stats s
+      JOIN players p ON p.id = s.player_id
+      WHERE s.team_id = ?
+      GROUP BY s.player_id
+      ORDER BY pts DESC, g DESC
+    `).bind(team.id).all<{
+      id: number; name: string; position: string;
+      gp: number; g: number; a: number; pts: number;
+      plus_minus: number; sog: number; hits: number; blocks: number; pim: number;
+    }>(),
+
+    // Goalie season stats for this team
+    db.prepare(`
+      SELECT p.id, p.name,
+             COUNT(*)                                                       AS gp,
+             SUM(CASE WHEN g.decision = 'W'  THEN 1 ELSE 0 END)           AS w,
+             SUM(CASE WHEN g.decision = 'L'  THEN 1 ELSE 0 END)           AS l,
+             SUM(CASE WHEN g.decision = 'OT' THEN 1 ELSE 0 END)           AS otl,
+             SUM(g.goals_against)                                          AS ga,
+             SUM(g.shots_against)                                          AS sa
+      FROM goalie_game_stats g
+      JOIN players p ON p.id = g.player_id
+      WHERE g.team_id = ?
+      GROUP BY g.player_id
+      ORDER BY w DESC
+    `).bind(team.id).all<{
+      id: number; name: string;
+      gp: number; w: number; l: number; otl: number;
+      ga: number; sa: number;
     }>(),
   ]);
 
@@ -139,11 +183,23 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     farmGoalies: farm.filter(p => p.is_goalie).map(parse),
   };
 
+  // ── Player stats ────────────────────────────────────────────────────────────
+  const skaterStats = skaterStatRows.results;
+
+  const goalieStats = goalieStatRows.results.map(g => {
+    const svPct = g.sa > 0 ? +((1 - g.ga / g.sa)).toFixed(3) : 0;
+    // GAA needs total minutes — approximate from GP * 60 (full games)
+    const gaa  = g.gp > 0 ? +((g.ga / g.gp)).toFixed(2) : 0;
+    return { ...g, svPct, gaa };
+  });
+
   return {
     team,
     games,
     record: { gp: w + l + otl, w, l, otl, pts: w * 2 + otl, gf, ga },
     roster,
     teamStats,
+    skaterStats,
+    goalieStats,
   };
 };

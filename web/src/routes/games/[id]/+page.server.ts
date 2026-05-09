@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getGameDetail } from '$lib/server/db';
 import type {
-  BoxScore, GoalEvent, SkaterStatLine, GoalieStatLine, TeamGameTotals,
+  BoxScore, GoalEvent, FightEvent, PenaltyEvent, SkaterStatLine, GoalieStatLine, TeamGameTotals,
 } from '$engine/types';
 
 export const load: PageServerLoad = async ({ params, platform }) => {
@@ -40,6 +40,8 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     homeStats: box?.home  ?? null,
     awayStats: box?.away  ?? null,
     goals:       box?.goals    ?? [],
+    fights:      box?.fights   ?? [],
+    penalties:   box?.penalties ?? [],
     skaters:     box?.skaters  ?? [],
     goalies:     box?.goalies  ?? [],
     threeStars:  box?.threeStars ?? null,
@@ -62,6 +64,8 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     homeStats: TeamGameTotals | null;
     awayStats: TeamGameTotals | null;
     goals: GoalEvent[];
+    fights: FightEvent[];
+    penalties: PenaltyEvent[];
     skaters: SkaterStatLine[];
     goalies: GoalieStatLine[];
     threeStars: BoxScore['threeStars'] | null;

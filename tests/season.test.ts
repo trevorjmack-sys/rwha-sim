@@ -1,65 +1,60 @@
 import { describe, it, expect } from 'vitest';
 import { loadLeague } from '../src/data.ts';
-import { generateSchedule } from '../src/schedule.ts';
+import { generateSchedule, type TeamEntry } from '../src/schedule.ts';
 import { simulateSeason } from '../src/season.ts';
 
+// Helper: split 22 teams into two conferences of 11 (alphabetical)
+function makeTeamEntries(): TeamEntry[] {
+  const league = loadLeague();
+  const names  = [...league.teams.keys()].sort();
+  const conf1  = new Set(names.slice(0, 11));
+  return names.map(n => ({ name: n, conference: (conf1.has(n) ? 1 : 2) as 1 | 2 }));
+}
+
 describe('schedule generation', () => {
-  it('produces exactly 902 games for 22 teams', () => {
-    const league = loadLeague();
-    const names  = [...league.teams.values()].map(t => t.name);
-    const sched  = generateSchedule(names, 1);
-    expect(sched).toHaveLength(902);
+  it('produces exactly 451 games for 22 teams', () => {
+    const entries = makeTeamEntries();
+    const sched   = generateSchedule(entries, 1);
+    expect(sched).toHaveLength(451);
   });
 
-  it('gives every team exactly 82 games', () => {
-    const league = loadLeague();
-    const names  = [...league.teams.values()].map(t => t.name);
-    const sched  = generateSchedule(names, 1);
+  it('gives every team exactly 41 games', () => {
+    const entries = makeTeamEntries();
+    const sched   = generateSchedule(entries, 1);
 
     const counts = new Map<string, number>();
     for (const g of sched) {
       counts.set(g.homeTeam, (counts.get(g.homeTeam) ?? 0) + 1);
       counts.set(g.awayTeam, (counts.get(g.awayTeam) ?? 0) + 1);
     }
-    for (const [team, gp] of counts) {
-      expect(gp, `${team} GP`).toBe(82);
+    for (const { name } of entries) {
+      expect(counts.get(name), `${name} GP`).toBe(41);
     }
   });
 
-  it('gives every team 41 home and 41 away games', () => {
-    const league = loadLeague();
-    const names  = [...league.teams.values()].map(t => t.name);
-    const sched  = generateSchedule(names, 1);
-
-    const home = new Map<string, number>();
-    const away = new Map<string, number>();
-    for (const g of sched) {
-      home.set(g.homeTeam, (home.get(g.homeTeam) ?? 0) + 1);
-      away.set(g.awayTeam, (away.get(g.awayTeam) ?? 0) + 1);
-    }
-    for (const name of names) {
-      expect(home.get(name), `${name} home`).toBe(41);
-      expect(away.get(name), `${name} away`).toBe(41);
-    }
-  });
-
-  it('assigns all games to weeks 1–26', () => {
-    const league = loadLeague();
-    const names  = [...league.teams.values()].map(t => t.name);
-    const sched  = generateSchedule(names, 42);
+  it('assigns all games to weeks 1–21', () => {
+    const entries = makeTeamEntries();
+    const sched   = generateSchedule(entries, 42);
     for (const g of sched) {
       expect(g.week).toBeGreaterThanOrEqual(1);
-      expect(g.week).toBeLessThanOrEqual(26);
+      expect(g.week).toBeLessThanOrEqual(21);
     }
   });
 
   it('is deterministic with the same seed', () => {
-    const league = loadLeague();
-    const names  = [...league.teams.values()].map(t => t.name);
-    const a = generateSchedule(names, 7);
-    const b = generateSchedule(names, 7);
+    const entries = makeTeamEntries();
+    const a = generateSchedule(entries, 7);
+    const b = generateSchedule(entries, 7);
     expect(a.map(g => g.gameId)).toEqual(b.map(g => g.gameId));
     expect(a.map(g => g.homeTeam + g.awayTeam)).toEqual(b.map(g => g.homeTeam + g.awayTeam));
+  });
+
+  it('requires exactly 11 teams per conference', () => {
+    const bad: TeamEntry[] = [
+      ...Array.from({ length: 10 }, (_, i) => ({ name: `T${i}`, conference: 1 as 1 | 2 })),
+      ...Array.from({ length: 12 }, (_, i) => ({ name: `U${i}`, conference: 2 as 1 | 2 })),
+    ];
+    expect(() => generateSchedule(bad, 1)).toThrow(/exactly 11 teams/);
   });
 });
 
@@ -69,8 +64,9 @@ describe('simulateSeason', () => {
     const results = simulateSeason(league, { seed: 1 });
     expect(results.standings).toHaveLength(22);
     for (const rec of results.standings) {
-      expect(rec.gp).toBe(82);
-      expect(rec.pts).toBe(rec.w * 2 + rec.otl);
+      expect(rec.gp).toBe(41);
+      // Points = W×2 + OTL×1 + T×1
+      expect(rec.pts).toBe(rec.w * 2 + rec.otl + rec.t);
     }
   });
 

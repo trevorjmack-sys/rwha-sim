@@ -17,12 +17,24 @@
     ov: number;
     is_goalie: boolean;
     injured_games_remaining: number;
+    suspended_games_remaining: number;
     is_personal: boolean;
+    jersey_number: number | null;
+    roster_level: string;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   function isDefense(pos: string) {
     return pos.split('/').some(p => p === 'D' || /^[LR]D$/.test(p));
+  }
+
+  function puckpediaUrl(name: string): string {
+    return 'https://puckpedia.com/player/' + name
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/['']/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z-]/g, '');
   }
 
   function colKey(level: string, scratch: number): Column {
@@ -48,7 +60,10 @@
         id: p.id, name: p.name, position: p.position, ov: p.ov,
         is_goalie: !!p.is_goalie,
         injured_games_remaining: p.injured_games_remaining,
+        suspended_games_remaining: p.suspended_games_remaining,
         is_personal: !!(p as any).is_personal,
+        jersey_number: p.jersey_number ?? null,
+        roster_level: p.roster_level,
       });
     }
     for (const k of Object.keys(c) as Column[]) c[k] = sortCards(c[k]);
@@ -110,6 +125,48 @@
       case 'D':  return parts.some(p => p === 'D' || /^[LR]D$/.test(p));
       default:   return true;
     }
+  }
+
+  // ── Jersey number editing ─────────────────────────────────────────────────────
+  let editingJerseyId: number | null = null;
+  let editingJerseyVal = '';
+  let jerseyErrors: Record<number, string> = {};
+
+  function startJerseyEdit(card: Card) {
+    editingJerseyId = card.id;
+    editingJerseyVal = String(card.jersey_number ?? '');
+  }
+
+  async function saveJersey(card: Card) {
+    const num = parseInt(editingJerseyVal, 10);
+    if (isNaN(num) || num < 1 || num > 99) {
+      jerseyErrors = { ...jerseyErrors, [card.id]: '1–99 only' };
+      return;
+    }
+    editingJerseyId = null;
+    const res = await fetch('/api/gm/jersey', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: card.id, jerseyNumber: num }),
+    });
+    if (res.ok) {
+      // Update all columns in place
+      delete jerseyErrors[card.id];
+      jerseyErrors = { ...jerseyErrors };
+      for (const col of Object.values(cols)) {
+        const c = col.find(c => c.id === card.id);
+        if (c) c.jersey_number = num;
+      }
+      cols = { ...cols };
+    } else {
+      const body = await res.json() as { error?: string };
+      jerseyErrors = { ...jerseyErrors, [card.id]: body.error ?? 'Error' };
+    }
+  }
+
+  function onJerseyKeydown(e: KeyboardEvent, card: Card) {
+    if (e.key === 'Enter') { e.preventDefault(); saveJersey(card); }
+    if (e.key === 'Escape') { editingJerseyId = null; }
   }
 
   // ── Mouse drag-and-drop ───────────────────────────────────────────────────────
@@ -217,6 +274,9 @@
     cols[to]   = [...cols[to], card];
     cols       = { ...cols };
   }
+
+  // ── GP data ───────────────────────────────────────────────────────────────────
+  $: playerGp = data.playerGp as Record<number, number>;
 
   // ── Column metadata ───────────────────────────────────────────────────────────
   const COL_META: Record<Column, { label: string; headerClass: string }> = {
@@ -339,11 +399,39 @@
                    {dragId === card.id ? 'opacity-25' : 'opacity-100'}
                    {card.injured_games_remaining > 0
                      ? 'border-rwha-red/50 bg-rwha-red/5'
+                     : card.suspended_games_remaining > 0
+                     ? 'border-rwha-amber/50 bg-rwha-amber/5'
                      : 'border-rwha-border/60 bg-rwha-bg hover:border-rwha-border'}"
           >
             <div class="flex items-center justify-between gap-1.5">
-              <span class="font-mono text-xs font-semibold text-rwha-text leading-tight truncate">
-                {#if card.injured_games_remaining > 0}
+              <!-- Jersey # -->
+              <div class="shrink-0" on:click|stopPropagation on:mousedown|stopPropagation>
+                {#if editingJerseyId === card.id}
+                  <input
+                    type="number" min="1" max="99"
+                    bind:value={editingJerseyVal}
+                    on:blur={() => saveJersey(card)}
+                    on:keydown={e => onJerseyKeydown(e, card)}
+                    class="w-9 bg-rwha-bg border border-rwha-amber/50 rounded px-1 py-0 text-xs font-mono
+                           text-rwha-amber text-center focus:outline-none focus:border-rwha-amber"
+                    autofocus
+                  >
+                {:else}
+                  <button
+                    on:click|stopPropagation={() => startJerseyEdit(card)}
+                    title="Click to edit jersey number"
+                    class="w-7 h-5 rounded text-xs font-mono font-bold text-center leading-none
+                           {jerseyErrors[card.id]
+                             ? 'text-rwha-red border border-rwha-red/50'
+                             : 'text-rwha-muted hover:text-rwha-amber transition-colors'}">
+                    {card.jersey_number ?? '?'}
+                  </button>
+                {/if}
+              </div>
+              <span class="font-mono text-xs font-semibold text-rwha-text leading-tight truncate flex-1 min-w-0">
+                {#if card.suspended_games_remaining > 0}
+                  <span class="text-rwha-amber">⛔</span>{' '}
+                {:else if card.injured_games_remaining > 0}
                   <span class="text-rwha-red">⚠</span>{' '}
                 {/if}
                 {#if card.is_personal}
@@ -351,8 +439,18 @@
                 {/if}
                 {card.name}
               </span>
-              <span class="font-mono text-xs font-bold text-rwha-amber shrink-0">{card.ov}</span>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <a href={puckpediaUrl(card.name)} target="_blank" rel="noopener noreferrer"
+                   title="View on Puckpedia"
+                   on:click|stopPropagation
+                   class="font-mono text-xs text-rwha-muted hover:text-rwha-amber transition-colors leading-none">↗</a>
+                <span class="font-mono text-xs font-bold text-rwha-amber">{card.ov}</span>
+              </div>
             </div>
+            <!-- Error message -->
+            {#if jerseyErrors[card.id]}
+              <div class="font-mono text-[10px] text-rwha-red mt-0.5">{jerseyErrors[card.id]}</div>
+            {/if}
             <div class="font-mono text-[10px] text-rwha-muted mt-0.5 leading-tight">
               {card.is_goalie ? 'G' : card.position.replace(/\//g, ',')}
               {#if card.is_personal}
@@ -360,6 +458,17 @@
               {/if}
               {#if card.injured_games_remaining > 0}
                 <span class="text-rwha-red ml-1">INJ·{card.injured_games_remaining}g</span>
+              {/if}
+              {#if card.suspended_games_remaining > 0}
+                <span class="text-rwha-amber ml-1">SUSP·{card.suspended_games_remaining}g</span>
+              {/if}
+              {#if col === 'proDress' || col === 'proScratch'}
+                {@const gp = playerGp[card.id] ?? 0}
+                {#if gp < 10}
+                  <span class="text-rwha-amber ml-1">{gp}GP†</span>
+                {:else}
+                  <span class="text-rwha-muted/60 ml-1">{gp}GP</span>
+                {/if}
               {/if}
             </div>
           </div>
@@ -385,4 +494,7 @@
   <span>Pro Scratch: <span class="text-rwha-text">max 3</span> (any position)</span>
   <span class="text-rwha-border">·</span>
   <span>Farm salaries don't count toward cap</span>
+</div>
+<div class="mt-1 font-mono text-xs text-rwha-muted/60">
+  <span class="text-rwha-amber">†</span> &lt; 10 GP — playoff eligibility at risk
 </div>

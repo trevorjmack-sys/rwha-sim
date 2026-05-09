@@ -23,6 +23,15 @@
   // Skater attr column order matching rwha.net
   const SKATER_COLS = ['ck','fg','di','sk','st','en','du','ph','fo','pa','sc','df','ps','ex','ld','po','mo'] as const;
   const GOALIE_COLS = ['sk','du','en','sz','ag','rb','sc','hs','rt','ph','ps','ex','ld','po','mo'] as const;
+
+  function puckpediaUrl(name: string): string {
+    return 'https://puckpedia.com/player/' + name
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/['']/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z-]/g, '');
+  }
 </script>
 
 <svelte:head><title>Rosters — RWHA Sim</title></svelte:head>
@@ -86,9 +95,10 @@
         <tbody>
           {#each team.proSkaters as p, i}
             <tr class="{p.injured_games_remaining > 0 ? 'bg-rwha-red/5' : ''}">
-              <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{i + 1}</td>
+              <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{p.jersey_number ?? i + 1}</td>
               <td class="text-left pl-2 sticky left-6 bg-rwha-surface font-semibold text-rwha-text">
-                {p.name}
+                <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
+                   class="hover:text-rwha-amber transition-colors">{p.name}</a>
                 {#if p.injured_games_remaining > 0}
                   <span class="text-rwha-red ml-1 font-normal">(INJ)</span>
                 {/if}
@@ -140,7 +150,8 @@
               <tr class="{p.injured_games_remaining > 0 ? 'bg-rwha-red/5' : ''}">
                 <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">G</td>
                 <td class="text-left pl-2 sticky left-5 bg-rwha-surface font-semibold text-rwha-text">
-                  {p.name}
+                  <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
+                     class="hover:text-rwha-amber transition-colors">{p.name}</a>
                   {#if p.injured_games_remaining > 0}
                     <span class="text-rwha-red ml-1 font-normal">(INJ)</span>
                   {/if}
@@ -188,8 +199,11 @@
             <tbody>
               {#each team.farmSkaters as p, i}
                 <tr>
-                  <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{i + 1}</td>
-                  <td class="text-left pl-2 sticky left-6 bg-rwha-surface text-rwha-muted">{p.name}</td>
+                  <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{p.jersey_number ?? i + 1}</td>
+                  <td class="text-left pl-2 sticky left-6 bg-rwha-surface text-rwha-muted">
+                    <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
+                       class="hover:text-rwha-amber transition-colors">{p.name}</a>
+                  </td>
                   <td class="text-rwha-muted">{x(p.position, 'C')}</td>
                   <td class="text-rwha-muted">{x(p.position, 'L')}</td>
                   <td class="text-rwha-muted">{x(p.position, 'R')}</td>
@@ -226,7 +240,10 @@
                 {#each team.farmGoalies as p}
                   <tr>
                     <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">G</td>
-                    <td class="text-left pl-2 sticky left-5 bg-rwha-surface text-rwha-muted">{p.name}</td>
+                    <td class="text-left pl-2 sticky left-5 bg-rwha-surface text-rwha-muted">
+                      <a href={puckpediaUrl(p.name)} target="_blank" rel="noopener noreferrer"
+                         class="hover:text-rwha-amber transition-colors">{p.name}</a>
+                    </td>
                     <td class="text-rwha-muted">{fmtCon(p.injured_games_remaining)}</td>
                     <td class="text-rwha-muted">{p.injured_games_remaining > 0 ? p.injured_games_remaining : ''}</td>
                     {#each GOALIE_COLS as col}
