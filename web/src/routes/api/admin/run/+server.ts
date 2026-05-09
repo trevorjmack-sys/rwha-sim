@@ -25,7 +25,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   let count = 1;
   try {
     const body = await request.json() as { count?: number };
-    count = Math.min(20, Math.max(1, body.count ?? 1));
+    count = Math.min(50, Math.max(1, body.count ?? 1));
   } catch { /* default to 1 */ }
 
   const seasonId = await getActiveSeasonId(db);

@@ -184,6 +184,6 @@
 
   <!-- Footer -->
   <footer class="border-t border-rwha-border py-4 text-center text-rwha-muted text-xs font-mono">
-    RWHASL · Private league · Season 2025-26
+    RWHASL · Private league · Summer 2026
   </footer>
 </div>

@@ -12,6 +12,7 @@
 
   function fmtPct(n: number) { return (n * 100).toFixed(1) + '%'; }
   function fmtSvp(n: number) { return n.toFixed(3).replace(/^0/, ''); }
+  function fmtGameId(id: number) { return String(id).padStart(3, '0'); }
 
   $: homeWon = (data.homeGoals ?? 0) > (data.awayGoals ?? 0);
   $: awayWon = (data.awayGoals ?? 0) > (data.homeGoals ?? 0);
@@ -30,7 +31,7 @@
   }
 </script>
 
-<svelte:head><title>Game #{data.gameId} — RWHA Sim</title></svelte:head>
+<svelte:head><title>Game #{fmtGameId(data.gameId)} — RWHA Sim</title></svelte:head>
 
 <!-- Back link -->
 <div class="mb-4">
@@ -65,7 +66,7 @@
       <div class="text-rwha-muted font-mono text-xs mt-1 tracking-widest">
         {data.finalLabel ?? (data.status === 'scheduled' ? 'NOT PLAYED' : 'FINAL')}
       </div>
-      <div class="text-rwha-muted/40 font-mono text-xs mt-0.5">Week {data.week} · Game #{data.gameId}</div>
+      <div class="text-rwha-muted/40 font-mono text-xs mt-0.5">Week {data.week} · Game #{fmtGameId(data.gameId)}</div>
     </div>
 
     <!-- Home -->

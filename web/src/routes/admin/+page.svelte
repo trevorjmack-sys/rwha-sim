@@ -28,6 +28,11 @@
 
   let running         = false;
   let batchCount      = 1;
+  let weekMode        = false;  // run all remaining games in the current week
+
+  $: effectiveCount = weekMode ? scheduledCards.length : batchCount;
+
+  function fmtGameId(id: number) { return String(id).padStart(3, '0'); }
   let message         = '';
   let playedCount     = data.playedGames;   // updated locally after each batch
   let showNextWeek    = false;              // show reload prompt when week is done
@@ -196,16 +201,24 @@
   <div class="flex items-center gap-3">
     <div class="flex items-center gap-2 text-sm text-rwha-muted font-mono">
       <span>Run</span>
-      {#each [1, 3, 5, 10] as n}
+      {#each [1, 5, 10] as n}
         <button
           class="w-8 h-8 rounded border font-bold transition-colors
-                 {batchCount === n
+                 {!weekMode && batchCount === n
                    ? 'border-rwha-amber bg-rwha-amber/20 text-rwha-amber'
                    : 'border-rwha-border text-rwha-muted hover:border-rwha-amber/50'}"
-          on:click={() => batchCount = n}
+          on:click={() => { batchCount = n; weekMode = false; }}
         >{n}</button>
       {/each}
-      <span>game{batchCount > 1 ? 's' : ''}</span>
+      <button
+        class="px-2 h-8 rounded border font-bold transition-colors text-xs
+               {weekMode
+                 ? 'border-rwha-amber bg-rwha-amber/20 text-rwha-amber'
+                 : 'border-rwha-border text-rwha-muted hover:border-rwha-amber/50'}"
+        on:click={() => weekMode = true}
+        title="Run all remaining games in Week {data.currentWeek}"
+      >Wk {data.currentWeek}</button>
+      <span>{weekMode ? `(${scheduledCards.length} games)` : `game${effectiveCount > 1 ? 's' : ''}`}</span>
     </div>
 
     <button
@@ -214,7 +227,7 @@
                ? 'bg-rwha-border text-rwha-muted cursor-not-allowed'
                : 'bg-rwha-amber text-rwha-bg hover:brightness-110 active:scale-95 shadow-lg shadow-rwha-amber/20'}"
       disabled={running || scheduledCards.length === 0}
-      on:click={() => runGames(batchCount)}
+      on:click={() => runGames(effectiveCount)}
     >
       {running ? '⏳ Simulating…' : '▶ Run Games'}
     </button>
@@ -273,7 +286,7 @@
       <!-- Score row -->
       <div class="flex items-center px-4 py-3 gap-4">
         <!-- Game number -->
-        <span class="text-rwha-muted font-mono text-xs w-12 shrink-0">#{card.gameId}</span>
+        <span class="text-rwha-muted font-mono text-xs w-12 shrink-0">#{fmtGameId(card.gameId)}</span>
 
         <!-- Home team -->
         <div class="flex-1 text-right">
