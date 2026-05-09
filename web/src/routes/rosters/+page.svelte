@@ -322,6 +322,9 @@
 {/each}
 
 <style>
-  /* Left-align all column headers on the rosters page */
-  :global(.stat-table th) { text-align: left; }
+  /* Center stat columns; keep sticky name/number columns left-aligned */
+  :global(.stat-table th)        { text-align: center; }
+  :global(.stat-table td)        { text-align: center; }
+  :global(.stat-table th.sticky) { text-align: left; }
+  :global(.stat-table td.sticky) { text-align: left; }
 </style>
