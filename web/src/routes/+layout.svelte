@@ -5,7 +5,7 @@
   export let data: LayoutData;
 
   const nav = [
-    { href: '/',         label: 'Standings' },
+    { href: '/standings', label: 'Standings'  },
     { href: '/scores',   label: 'Scores'    },
     { href: '/schedule', label: 'Schedule'  },
     { href: '/leaders',  label: 'Leaders'   },
