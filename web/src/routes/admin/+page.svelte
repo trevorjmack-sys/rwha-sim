@@ -169,7 +169,16 @@
       const body = await res.json();
       if (body.ok) {
         lastSyncAt  = body.syncedAt;
-        syncMessage = 'Synced — ' + describe(body.summary);
+        syncMessage = 'Synced — ' + describe(body.summary) + ' · finding headshots…';
+        // Keep looking up NHL ids for headshots until none are left to check.
+        let photos = body.summary.headshots ?? 0;
+        for (let i = 0; i < 10; i++) {
+          const r = await fetch('/api/admin/fill-headshots', { method: 'POST' }).then(x => x.json());
+          if (!r.ok) break;
+          photos += r.matched;
+          if (r.remaining === 0 || r.checked === 0) break;
+        }
+        syncMessage = 'Synced — ' + describe(body.summary) + (photos ? ` · ${photos} headshots found` : '');
       } else {
         syncMessage = 'Sync failed: ' + body.error;
       }
