@@ -287,7 +287,7 @@
   };
 </script>
 
-<svelte:head><title>Roster — RWHA Sim</title></svelte:head>
+<svelte:head><title>Roster — RWHABL</title></svelte:head>
 
 <!-- ── Top bar ───────────────────────────────────────────────────────────────── -->
 <div class="mb-3 flex items-start justify-between gap-4 flex-wrap">
