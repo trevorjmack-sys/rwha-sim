@@ -18,7 +18,7 @@
     : false;
 </script>
 
-<svelte:head><title>My Team — RWHA Sim</title></svelte:head>
+<svelte:head><title>My Team — RWHABL</title></svelte:head>
 
 <!-- ── Next game banner ──────────────────────────────────────────────────────── -->
 {#if nextGame}
