@@ -19,7 +19,7 @@
   }
 </script>
 
-<svelte:head><title>Scores — RWHA Sim</title></svelte:head>
+<svelte:head><title>Scores — RWHABL</title></svelte:head>
 
 <!-- Week nav -->
 <div class="mb-6 flex items-center justify-between gap-4">
