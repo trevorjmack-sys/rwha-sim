@@ -19,14 +19,14 @@
   }
 </script>
 
-<svelte:head><title>RWHA Sim</title></svelte:head>
+<svelte:head><title>RWHABL</title></svelte:head>
 
 <!-- ── Top row: logo left + three stars + PIM ───────────────────────────────── -->
 <div class="flex flex-col lg:flex-row gap-6 mb-6">
 
   <!-- Logo -->
   <div class="flex items-start justify-center lg:justify-start shrink-0">
-    <img src="/logos/mainlogo.png" alt="RWHASL" class="h-52 w-auto object-contain drop-shadow-lg" />
+    <img src="/logos/mainlogo.png" alt="RWHABL" class="h-52 w-auto object-contain drop-shadow-lg" />
   </div>
 
   <!-- Three stars + PIM side by side (fill remaining width) -->
