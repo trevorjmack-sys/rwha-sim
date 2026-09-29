@@ -48,7 +48,7 @@
 
       <!-- Wordmark -->
       <a href="/" class="font-mono font-bold text-rwha-amber tracking-wider text-sm shrink-0">
-        RWHASL
+        RWHABL
       </a>
 
       <!-- Desktop nav — hidden on mobile -->
@@ -183,6 +183,6 @@
 
   <!-- Footer -->
   <footer class="border-t border-rwha-border py-4 text-center text-rwha-muted text-xs font-mono">
-    RWHASL · Private league · Summer 2026
+    RWHABL · Private league · Summer 2026
   </footer>
 </div>
