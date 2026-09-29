@@ -186,6 +186,10 @@
                   {#if f.homeGameMisconduct || f.awayGameMisconduct}
                     <span class="ml-1 font-mono text-[10px] text-rwha-red border border-rwha-red/40 rounded px-1">+GM</span>
                   {/if}
+                  {#if f.goalieFight}
+                    <span class="ml-1 font-mono text-[10px] text-rwha-amber border border-rwha-amber/50 rounded px-1"
+                          title="The two starting goalies dropped the gloves">GOALIES</span>
+                  {/if}
                   {#if f.afterInjury}
                     <span class="ml-1 font-mono text-[10px] text-rwha-red border border-rwha-red/50 rounded px-1"
                           title="A teammate answered the hit that injured a player">INJURY</span>
