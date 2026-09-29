@@ -25,7 +25,7 @@
   }
 </script>
 
-<svelte:head><title>Playoffs — RWHA Sim</title></svelte:head>
+<svelte:head><title>Playoffs — RWHABL</title></svelte:head>
 
 <!-- Header -->
 <div class="mb-6">
