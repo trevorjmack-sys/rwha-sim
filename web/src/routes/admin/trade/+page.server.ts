@@ -11,7 +11,7 @@ interface PlayerRow { id: number; name: string; position: string; ov: number; ro
 async function loadTeamAssets(db: D1Database, teamId: number, teams: TeamRow[]) {
   const pl = await db.prepare(
     `SELECT id, name, position, ov, roster_level, is_goalie, is_scratch
-     FROM players WHERE team_id = ? AND (is_personal IS NULL OR is_personal = 0)
+     FROM players WHERE team_id = ? AND is_active = 1 AND (is_personal IS NULL OR is_personal = 0)
      ORDER BY roster_level DESC, is_goalie, ov DESC`
   ).bind(teamId).all<PlayerRow>();
   const meta = teams.find(t => t.id === teamId)!;
