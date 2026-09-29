@@ -225,11 +225,6 @@
       ⚡ Commissioner
     </h1>
     <div class="flex gap-2 mt-2">
-      <a href="/admin/trade"
-         class="inline-block px-4 py-1.5 text-sm font-mono font-bold rounded border-2
-                border-rwha-text text-rwha-text hover:border-rwha-amber hover:text-rwha-amber transition-colors">
-        ⇄ Trade Manager
-      </a>
       <a href="/admin/rivalries"
          class="inline-block px-4 py-1.5 text-sm font-mono font-bold rounded border-2
                 border-rwha-text text-rwha-text hover:border-rwha-amber hover:text-rwha-amber transition-colors">
