@@ -100,7 +100,7 @@
   }
 </script>
 
-<svelte:head><title>Lines — RWHA Sim</title></svelte:head>
+<svelte:head><title>Lines — RWHABL</title></svelte:head>
 
 {#if form?.error}
   <div class="mb-4 p-3 rounded border border-rwha-red/40 bg-rwha-red/10 text-rwha-red font-mono text-sm">
