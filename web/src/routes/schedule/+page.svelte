@@ -41,7 +41,7 @@
   $: currentWeekInfo = data.weeks.find(w => w.week === data.week);
 </script>
 
-<svelte:head><title>Schedule — RWHA Sim</title></svelte:head>
+<svelte:head><title>Schedule — RWHABL</title></svelte:head>
 
 <!-- ── Header ────────────────────────────────────────────────────────────────── -->
 <div class="mb-5 flex items-end justify-between gap-4">
