@@ -6,6 +6,10 @@
 // to simulate a logged-in user.
 
 import type { Handle } from '@sveltejs/kit';
+import { ensureSchema, maybeAutoSync } from '$lib/server/rwha-sync';
+
+// Check at most every few minutes per isolate whether a roster sync is due.
+let lastSyncCheck = 0;
 
 /** Decode the email claim from a Cloudflare Access JWT without verifying the
  *  signature — CF Access has already verified it at the edge before the
@@ -23,6 +27,18 @@ function emailFromCfJwt(token: string): string | null {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
+  // 0. Make sure the roster-sync columns exist, and kick off a background
+  //    rwha.net roster sync when the last one is more than two days old.
+  const db = event.platform?.env.DB;
+  if (db) {
+    try { await ensureSchema(db); } catch { /* D1 unavailable — pages handle it */ }
+    const ctx = event.platform?.ctx ?? (event.platform as { context?: { waitUntil(p: Promise<unknown>): void } } | undefined)?.context;
+    if (ctx?.waitUntil && Date.now() - lastSyncCheck > 5 * 60 * 1000) {
+      lastSyncCheck = Date.now();
+      await maybeAutoSync(db, p => ctx.waitUntil(p));
+    }
+  }
+
   // 1. Cloudflare Access injects this header after authentication.
   const headerEmail = event.request.headers.get('cf-access-authenticated-user-email');
 
