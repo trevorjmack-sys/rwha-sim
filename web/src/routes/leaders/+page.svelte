@@ -58,7 +58,7 @@
   }
 </script>
 
-<svelte:head><title>Leaders — RWHA Sim</title></svelte:head>
+<svelte:head><title>Leaders — RWHABL</title></svelte:head>
 
 <div class="mb-6 flex items-end justify-between">
   <h1 class="font-mono font-bold text-rwha-amber text-lg tracking-wider uppercase">Leaders</h1>
