@@ -143,7 +143,7 @@ export async function runGame(
       .bind(teamId)
       .first<{ name: string; gm_name: string }>();
     const { results: players } = await db
-      .prepare('SELECT * FROM players WHERE team_id = ?')
+      .prepare('SELECT * FROM players WHERE team_id = ? AND is_active = 1')
       .bind(teamId)
       .all<PlayerRow>();
     return { meta: teamMeta!, players };

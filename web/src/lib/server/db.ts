@@ -184,7 +184,7 @@ export async function getGameResult(db: D1Database, gameId: number): Promise<Res
 /** Get all players for a team. */
 export async function getTeamPlayers(db: D1Database, teamId: number): Promise<PlayerRow[]> {
   const { results } = await db.prepare(`
-    SELECT * FROM players WHERE team_id = ? ORDER BY is_goalie, ov DESC
+    SELECT * FROM players WHERE team_id = ? AND is_active = 1 ORDER BY is_goalie, ov DESC
   `).bind(teamId).all<PlayerRow>();
   return results;
 }
