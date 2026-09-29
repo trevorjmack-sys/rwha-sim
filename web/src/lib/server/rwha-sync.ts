@@ -180,6 +180,18 @@ async function defaultFetchJson(path: string): Promise<unknown> {
   return res.json();
 }
 
+// ── The league's personal (joke) players ─────────────────────────────────────
+// rwha.net doesn't flag them, so they're named here. The sync marks them
+// is_personal = 1 (★ on rosters, Harold Snepsts' face for a headshot).
+// Add a name here when a new one joins.
+export const PERSONAL_PLAYERS = [
+  'Manson Gluehead', 'Lee Mack', 'Velyki Hospador', 'Douche Larouche', 'Shitty-Kitty Gangbang',
+  'El Burrito Peligroso', 'Todd Harkness', 'Buck Phucksalot', 'Moxie Manslammer', 'Danny Massawhip',
+  'Manly Rymjob', 'Wrinkles Cumbersnatch', 'Rick Spreadum', 'Ricky Cumalot', 'Wee Kawk',
+  'Nipples Tenderloin', 'Hugo Drax', 'Mulvinder Bitchtits', 'Cockring Bomber', 'Brock Knuckledunker',
+  'Raccoon Willie', 'Chu Kock',
+];
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const SKATER_KEYS = ['ck','fg','di','sk','st','en','du','ph','fo','pa','sc','df','ps','ex','ld','po','mo'] as const;
 const GOALIE_KEYS = ['sk','du','en','sz','ag','rb','sc','hs','rt','ph','ps','ex','ld','po','mo'] as const;
@@ -333,6 +345,7 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
     byName.set(k, [...(byName.get(k) ?? []), p]);
   }
 
+  const personalNames = new Set(PERSONAL_PLAYERS.map(normName));
   const seenIds = new Set<number>();
   for (const rt of remote) {
     const teamId = teamIdByNumber.get(rt.number);
@@ -341,6 +354,7 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
     for (const { p, level, scratch } of rt.players) {
       summary.players++;
       const isGoalie = p.kind === 'goalie' ? 1 : 0;
+      const personal = personalNames.has(normName(p.name)) ? 1 : 0;
       const fields = {
         name: p.name.trim(), position: mapPosition(p), attrs: mapAttrs(p),
         ov: intOrNull(p.ovr) ?? 50, age: intOrNull(p.age), contract: intOrNull(p.contract),
@@ -368,6 +382,7 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
           UPDATE players SET team_id = ?, name = ?, position = ?, is_goalie = ?, ov = ?, attrs = ?,
                  age = ?, contract_yrs = ?, salary = ?, roster_level = ?, is_scratch = ?,
                  rwha_id = ?, is_active = 1,
+                 is_personal = CASE WHEN ? = 1 THEN 1 ELSE is_personal END,
                  -- NHL id: rwha.net's if it has one; else keep one our own lookup
                  -- found (nhl_lookup_at set); anything else is stale — clear it
                  -- so the headshot lookup finds the right one.
@@ -377,17 +392,17 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
           WHERE id = ?
         `).bind(teamId, fields.name, fields.position, isGoalie, fields.ov, fields.attrs,
                 fields.age, fields.contract, fields.salary, level, isScratch,
-                p.id, fields.nhlId, fields.nhlId, existing.id));
+                p.id, personal, fields.nhlId, fields.nhlId, existing.id));
         summary.updated++;
       } else {
         const jersey = intOrNull(p.jersey);
         stmts.push(db.prepare(`
           INSERT INTO players (team_id, name, position, is_goalie, ov, attrs, age, contract_yrs, salary,
                                roster_level, is_scratch, rwha_id, nhl_id, jersey_number, is_active, is_personal)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         `).bind(teamId, fields.name, fields.position, isGoalie, fields.ov, fields.attrs,
                 fields.age, fields.contract, fields.salary, level, scratch && level === 'pro' ? 1 : 0,
-                p.id, fields.nhlId, jersey && jersey > 0 ? jersey : null));
+                p.id, fields.nhlId, jersey && jersey > 0 ? jersey : null, personal));
         summary.added.push(`${fields.name} (${teamNameById.get(teamId)})`);
       }
     }
@@ -517,7 +532,7 @@ export async function fillNhlIds(
     SELECT p.id, p.name, p.position FROM players p
     JOIN teams t ON t.id = p.team_id
     JOIN seasons s ON s.id = t.season_id AND s.status = 'active'
-    WHERE p.is_active = 1 AND p.nhl_id IS NULL
+    WHERE p.is_active = 1 AND p.nhl_id IS NULL AND p.is_personal = 0
       AND (p.nhl_lookup_at IS NULL OR p.nhl_lookup_at < ?)
     ORDER BY p.nhl_lookup_at IS NOT NULL, p.id
   `).bind(now - LOOKUP_RETRY_MS).all<{ id: number; name: string; position: string }>();
