@@ -33,6 +33,7 @@ const OT_LENGTH     = 5  * 60;
 // Beer-league flourishes
 const SCORING_BOOST = 1.12;   // TUNE: multiplies each shot's chance of going in
 const MICHIGAN_RATE = 1 / 37; // per-game roll; lands ~1 in 40 games (needs an EV goal by a forward)
+const GOALIE_FIGHT_RATE = 1 / 25; // chance per game the two starting goalies drop the gloves
 
 // Injuries: per-player chance per game, scaled by durability (DU 99 → 0.2%,
 // DU 1 → 1.0%). Every injury comes from a hit, and a teammate answers it.
@@ -261,6 +262,26 @@ export function simulateGame(
     }
   }
   injuries.sort((a, b) => a.period - b.period || a.time.localeCompare(b.time));
+
+  // ── Goalie fight (~1 in 25 games): the starters meet at centre ice ──────
+  if (rng.bool(GOALIE_FIGHT_RATE)) {
+    const hg = homeLines.starter, ag = awayLines.starter;
+    // Bigger, sturdier goalie tends to win: size + durability, plus chaos.
+    const hW = hg.attrs.sz + hg.attrs.du + rng.normal(0, 12);
+    const aW = ag.attrs.sz + ag.attrs.du + rng.normal(0, 12);
+    const diff = hW - aW;
+    const outcome: FightEvent['outcome'] = Math.abs(diff) < 5 ? 'draw' : diff > 0 ? 'home' : 'away';
+    fights.push({
+      period: rng.int(1, 3),
+      time: fmtTime(rng.int(60, PERIOD_LENGTH - 60)),
+      homePlayer: hg.name,
+      awayPlayer: ag.name,
+      outcome,
+      homeGameMisconduct: rng.bool(outcome === 'away' ? 0.45 : 0.20) || undefined,
+      awayGameMisconduct: rng.bool(outcome === 'home' ? 0.45 : 0.20) || undefined,
+      goalieFight: true,
+    });
+  }
   fights.sort((a, b) => a.period - b.period || a.time.localeCompare(b.time));
 
   // ── Per-skater stats ──────────────────────────────────────────────────────

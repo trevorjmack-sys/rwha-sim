@@ -200,6 +200,7 @@ export interface FightEvent {
   awayGameMisconduct?: boolean;
   afterMichigan?: boolean;   // someone took exception to a Michigan goal
   afterInjury?: boolean;     // a teammate answered the hit that injured someone
+  goalieFight?: boolean;     // the two starting goalies met at centre ice
 }
 
 // A player hurt on a hit during the game. He finishes this game in the box
