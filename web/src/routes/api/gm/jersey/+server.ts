@@ -41,7 +41,7 @@ export const PATCH: RequestHandler = async ({ request, locals, platform }) => {
   if (player.roster_level === 'pro') {
     const conflict = await db
       .prepare(`SELECT name FROM players
-                WHERE team_id = ? AND roster_level = 'pro'
+                WHERE team_id = ? AND is_active = 1 AND roster_level = 'pro'
                   AND jersey_number = ? AND id != ?`)
       .bind(player.team_id, jerseyNumber, playerId)
       .first<{ name: string }>();
