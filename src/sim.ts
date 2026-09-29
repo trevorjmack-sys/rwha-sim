@@ -15,6 +15,7 @@ import type {
 } from './types.ts';
 import { generateLines } from './lines.ts';
 import { makeRng, type RNG } from './rng.ts';
+import { compareStars, starBlurb as starLineBlurb, type StarLine } from './stars.ts';
 
 export interface SimOptions {
   seed?: number;
@@ -28,6 +29,10 @@ export interface SimOptions {
 
 const PERIOD_LENGTH = 20 * 60; // seconds
 const OT_LENGTH     = 5  * 60;
+
+// Beer-league flourishes
+const SCORING_BOOST = 1.08;   // TUNE: multiplies each shot's chance of going in
+const MICHIGAN_RATE = 1 / 50; // chance per game of a Michigan (lacrosse wraparound) goal
 
 // Penalty infraction palette — sampled by DI weighting (Phase 1: uniform).
 const INFRACTIONS = [
@@ -107,7 +112,7 @@ export function simulateGame(
   // defense generates meaningfully more shots than a flat 1:1 scale would.
   const OFF_NORM  = 6.5;  // TUNE: empirical avg teamOffense() across RWHA
   const DEF_NORM  = 2.1;  // TUNE: empirical avg teamDefense() across RWHA
-  const SOG_BASE  = 8;    // TUNE: target avg SOG per period per team (~24/game)
+  const SOG_BASE  = 8.5;  // TUNE: target avg SOG per period per team (~25/game)
   const SOG_CURVE = 1.4;  // TUNE: exponent that widens quality-gap spread
 
   const homeOff = teamOffense(home, homeLines);
@@ -223,6 +228,13 @@ export function simulateGame(
   // ── Fights (beer league: frequent; rivalry cranks it up further) ─────────
   const fights: FightEvent[] = generateFights(home, homeLines, away, awayLines, rng, rivalryLevel);
 
+  // ── The Michigan (~1 in 50 games) — and the scorer answers for it ───────
+  if (rng.bool(MICHIGAN_RATE)) {
+    const michiganFight = addMichigan(goals, home, homeLines, away, awayLines, rng);
+    if (michiganFight) fights.push(michiganFight);
+  }
+  fights.sort((a, b) => a.period - b.period || a.time.localeCompare(b.time));
+
   // ── Per-skater stats ──────────────────────────────────────────────────────
   const skaters: SkaterStatLine[] = [];
   for (const { skater, slot } of flatSkaters(homeLines)) {
@@ -255,7 +267,7 @@ export function simulateGame(
   );
 
   // ── Three stars (top points; goalie wins steal #1 on shutouts) ────────────
-  const threeStars = pickThreeStars(skaters, goalies, homeTotal, awayTotal);
+  const threeStars = pickThreeStars(skaters, goalies, homeTotal, awayTotal, goals, fights, home.name);
 
   return {
     gameId: opts.gameId ?? 0,
@@ -300,9 +312,10 @@ function goalieSavePct(g: Goalie): number {
 }
 
 function goalsFromShots(sog: number, savePct: number, rng: RNG): number {
+  const savePctBoosted = 1 - (1 - savePct) * SCORING_BOOST;
   let goals = 0;
   for (let i = 0; i < sog; i++) {
-    if (!rng.bool(savePct)) goals++;
+    if (!rng.bool(savePctBoosted)) goals++;
   }
   return goals;
 }
@@ -457,6 +470,55 @@ function generateFights(
   return fights;
 }
 
+/**
+ * Turns one regulation even-strength goal by a forward into a Michigan
+ * (unassisted, lacrosse-style), and returns the fight that follows: the
+ * scorer squares off with the opponent's most willing (FG-weighted) skater
+ * a few seconds later. Returns null if the game had no eligible goal.
+ */
+function addMichigan(
+  goals: GoalEvent[], home: Team, hl: Lines, away: Team, al: Lines, rng: RNG,
+): FightEvent | null {
+  const forwards = (lines: Lines) => lines.forwards.flatMap(l => [l.lw, l.c, l.rw]);
+  const homeFwd = forwards(hl), awayFwd = forwards(al);
+  const eligible = goals.filter(g => g.strength === 'EV' && g.period <= 3 &&
+    (g.team === home.name ? homeFwd : awayFwd).some(f => f.name === g.scorer));
+  if (eligible.length === 0) return null;
+
+  // Skilled hands pull it off more often: weight by the scorer's SC + SK.
+  const scorerOf = (g: GoalEvent) =>
+    (g.team === home.name ? homeFwd : awayFwd).find(f => f.name === g.scorer)!;
+  const goal = eligible[rng.weighted(eligible.map(g => scorerOf(g).attrs.sc + scorerOf(g).attrs.sk))]!;
+  goal.michigan = true;
+  goal.assists = [];
+
+  const scorerIsHome = goal.team === home.name;
+  const scorer = scorerOf(goal);
+  const opponents = [...flatSkaters(scorerIsHome ? al : hl)].map(x => x.skater);
+  const avenger = opponents[rng.weighted(opponents.map(s => Math.max(1, s.attrs.fg)))]!;
+
+  const [mm, ss] = goal.time.split(':').map(Number);
+  const sec = Math.min(PERIOD_LENGTH - 1, mm! * 60 + ss! + rng.int(2, 12));
+
+  const homeFighter = scorerIsHome ? scorer : avenger;
+  const awayFighter = scorerIsHome ? avenger : scorer;
+  const hWeight = homeFighter.attrs.fg + homeFighter.attrs.st + rng.normal(0, 10);
+  const aWeight = awayFighter.attrs.fg + awayFighter.attrs.st + rng.normal(0, 10);
+  const diff = hWeight - aWeight;
+  const outcome: FightEvent['outcome'] = Math.abs(diff) < 5 ? 'draw' : diff > 0 ? 'home' : 'away';
+
+  return {
+    period: goal.period,
+    time: fmtTime(sec),
+    homePlayer: homeFighter.name,
+    awayPlayer: awayFighter.name,
+    outcome,
+    homeGameMisconduct: rng.bool(outcome === 'away' ? 0.45 : 0.20) || undefined,
+    awayGameMisconduct: rng.bool(outcome === 'home' ? 0.45 : 0.20) || undefined,
+    afterMichigan: true,
+  };
+}
+
 function skaterLine(
   skater: Skater, slot: string, teamName: string,
   goals: GoalEvent[], penalties: PenaltyEvent[], fights: FightEvent[],
@@ -562,28 +624,36 @@ function teamTotals(
 function pickThreeStars(
   skaters: SkaterStatLine[], goalies: GoalieStatLine[],
   homeTotal: number, awayTotal: number,
+  goals: GoalEvent[], fights: FightEvent[], homeName: string,
 ): [ThreeStar, ThreeStar, ThreeStar] {
+  // Build each skater's star line: points plus fights, Gordie Howes, Michigans.
+  const lines = skaters.map(s => {
+    const isHome = s.team === homeName;
+    const mine = fights.filter(f => (isHome ? f.homePlayer : f.awayPlayer) === s.name);
+    const line: StarLine & { s: SkaterStatLine } = {
+      s,
+      g: s.g, a: s.a,
+      fights: mine.length,
+      fightWins: mine.filter(f => f.outcome === (isHome ? 'home' : 'away')).length,
+      gordieHowes: s.g > 0 && s.a > 0 && mine.length > 0 ? 1 : 0,
+      michigans: goals.filter(g => g.michigan && g.team === s.team && g.scorer === s.name).length,
+    };
+    return line;
+  });
+  const sorted = [...lines].sort(compareStars);
+  const star = (rank: 1 | 2 | 3, l: (typeof lines)[number]): ThreeStar =>
+    ({ rank, player: l.s.name, team: l.s.team, blurb: starLineBlurb(l) });
+
   // Goalie steals #1 on a shutout
   if (homeTotal === 0 || awayTotal === 0) {
     const winner = homeTotal === 0 ? goalies[1]! : goalies[0]!;
     if (winner.goalsAgainst === 0) {
-      const top2 = [...skaters].sort((a, b) => (b.g + b.a) - (a.g + a.a)).slice(0, 2);
       return [
         { rank: 1, player: winner.name, team: winner.team, blurb: `SHUTOUT (${winner.shotsAgainst} sv)` },
-        { rank: 2, player: top2[0]!.name, team: top2[0]!.team, blurb: starBlurb(top2[0]!) },
-        { rank: 3, player: top2[1]!.name, team: top2[1]!.team, blurb: starBlurb(top2[1]!) },
+        star(2, sorted[0]!),
+        star(3, sorted[1]!),
       ];
     }
   }
-  const sorted = [...skaters].sort((a, b) => (b.g * 2 + b.a) - (a.g * 2 + a.a));
-  const top3 = sorted.slice(0, 3);
-  return [
-    { rank: 1, player: top3[0]!.name, team: top3[0]!.team, blurb: starBlurb(top3[0]!) },
-    { rank: 2, player: top3[1]!.name, team: top3[1]!.team, blurb: starBlurb(top3[1]!) },
-    { rank: 3, player: top3[2]!.name, team: top3[2]!.team, blurb: starBlurb(top3[2]!) },
-  ];
-}
-
-function starBlurb(s: SkaterStatLine): string {
-  return `${s.g}-${s.a}-${s.g + s.a}`;
+  return [star(1, sorted[0]!), star(2, sorted[1]!), star(3, sorted[2]!)];
 }

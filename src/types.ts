@@ -177,6 +177,7 @@ export interface GoalEvent {
   scorerSeasonGoals?: number; // optional flavor; "(24)" in the box score
   emptyNet?: boolean;
   gameWinner?: boolean;
+  michigan?: boolean;   // lacrosse-style wraparound — the scorer fights right after
 }
 
 export interface PenaltyEvent {
@@ -197,6 +198,7 @@ export interface FightEvent {
   // Game misconduct flags — ejected player serves a 1-game suspension
   homeGameMisconduct?: boolean;
   awayGameMisconduct?: boolean;
+  afterMichigan?: boolean;   // someone took exception to a Michigan goal
 }
 
 export interface SkaterStatLine {
