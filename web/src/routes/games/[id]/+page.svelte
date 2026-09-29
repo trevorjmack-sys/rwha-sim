@@ -31,7 +31,7 @@
   }
 </script>
 
-<svelte:head><title>Game #{fmtGameId(data.gameId)} — RWHA Sim</title></svelte:head>
+<svelte:head><title>Game #{fmtGameId(data.gameId)} — RWHABL</title></svelte:head>
 
 <!-- Back link -->
 <div class="mb-4">
