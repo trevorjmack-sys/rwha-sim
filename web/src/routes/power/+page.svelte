@@ -20,7 +20,7 @@
   }
 </script>
 
-<svelte:head><title>Power Rankings — RWHA Sim</title></svelte:head>
+<svelte:head><title>Power Rankings — RWHABL</title></svelte:head>
 
 <div class="mb-5 flex items-end justify-between gap-4">
   <div>
