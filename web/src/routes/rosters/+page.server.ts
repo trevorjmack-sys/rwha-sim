@@ -14,6 +14,7 @@ export interface RosterPlayer {
   injured_games_remaining: number;
   is_scratch: number;
   nhl_id: number | null;
+  is_personal: number;
   attrs: Record<string, number>;
 }
 
@@ -38,14 +39,14 @@ export const load: PageServerLoad = async ({ platform }) => {
     db.prepare(`SELECT id, name, gm_name, farm_name FROM teams WHERE season_id = ? ORDER BY name`)
       .bind(seasonId).all<{ id: number; name: string; gm_name: string; farm_name: string | null }>(),
     db.prepare(`SELECT id, team_id, name, position, is_goalie, roster_level, ov, age, contract_yrs,
-                       salary, injured_games_remaining, is_scratch, nhl_id, attrs
+                       salary, injured_games_remaining, is_scratch, nhl_id, is_personal, attrs
                 FROM players WHERE is_active = 1 AND team_id IN (SELECT id FROM teams WHERE season_id = ?)
                 ORDER BY team_id, roster_level DESC, is_goalie, ov DESC`)
       .bind(seasonId).all<{
         id: number; team_id: number; name: string; position: string;
         is_goalie: number; roster_level: string; ov: number;
         age: number | null; contract_yrs: number | null; salary: number | null;
-        injured_games_remaining: number; is_scratch: number; nhl_id: number | null; attrs: string;
+        injured_games_remaining: number; is_scratch: number; nhl_id: number | null; is_personal: number; attrs: string;
       }>(),
   ]);
 

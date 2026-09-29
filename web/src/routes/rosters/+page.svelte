@@ -29,8 +29,12 @@
       .replace(/[^a-z-]/g, '');
   }
 
-  function photoUrl(nhlId: number | null): string | null {
-    return nhlId ? `https://puckpedia.com/s/nhl/${nhlId}.jpg` : null;
+  // Personal (joke) players all wear Harold Snepsts' face.
+  const PERSONAL_PHOTO = 'https://www.hockeydb.com/ihdb/photos/harold-snepsts-1989-39.jpg';
+
+  function photoUrl(p: { nhl_id: number | null; is_personal?: number }): string | null {
+    if (p.is_personal) return PERSONAL_PHOTO;
+    return p.nhl_id ? `https://puckpedia.com/s/nhl/${p.nhl_id}.jpg` : null;
   }
 
   // Hover photo popup
@@ -39,8 +43,8 @@
   let popupY = 0;
   let popupVisible = false;
 
-  function showPhoto(e: MouseEvent, nhlId: number | null) {
-    const src = photoUrl(nhlId);
+  function showPhoto(e: MouseEvent, p: { nhl_id: number | null; is_personal?: number }) {
+    const src = photoUrl(p);
     if (!src) return;
     popupSrc = src;
     popupX = e.clientX + 14;
@@ -127,12 +131,12 @@
               <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{p.jersey_number ?? i + 1}</td>
               <td class="text-left pl-2 sticky left-6 bg-rwha-surface font-semibold text-rwha-text">
                 <div class="flex items-center gap-1.5">
-                  {#if photoUrl(p.nhl_id)}
+                  {#if photoUrl(p)}
                     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-                    <img src={photoUrl(p.nhl_id)} alt=""
-                         class="h-5 w-5 rounded-full object-cover shrink-0 cursor-default"
+                    <img src={photoUrl(p)} alt=""
+                         class="h-5 w-5 rounded-full object-cover object-top shrink-0 cursor-default"
                          on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }}
-                         on:mouseenter={(e) => showPhoto(e, p.nhl_id)}
+                         on:mouseenter={(e) => showPhoto(e, p)}
                          on:mousemove={movePhoto}
                          on:mouseleave={hidePhoto} />
                   {/if}
@@ -185,12 +189,12 @@
                 <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">G</td>
                 <td class="text-left pl-2 sticky left-5 bg-rwha-surface font-semibold text-rwha-text">
                   <div class="flex items-center gap-1.5">
-                    {#if photoUrl(p.nhl_id)}
+                    {#if photoUrl(p)}
                       <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-                      <img src={photoUrl(p.nhl_id)} alt=""
-                           class="h-5 w-5 rounded-full object-cover shrink-0 cursor-default"
+                      <img src={photoUrl(p)} alt=""
+                           class="h-5 w-5 rounded-full object-cover object-top shrink-0 cursor-default"
                            on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }}
-                           on:mouseenter={(e) => showPhoto(e, p.nhl_id)}
+                           on:mouseenter={(e) => showPhoto(e, p)}
                            on:mousemove={movePhoto}
                            on:mouseleave={hidePhoto} />
                     {/if}
@@ -243,12 +247,12 @@
                   <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">{p.jersey_number ?? i + 1}</td>
                   <td class="text-left pl-2 sticky left-6 bg-rwha-surface text-rwha-muted">
                     <div class="flex items-center gap-1.5">
-                      {#if photoUrl(p.nhl_id)}
+                      {#if photoUrl(p)}
                         <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-                        <img src={photoUrl(p.nhl_id)} alt=""
-                             class="h-5 w-5 rounded-full object-cover shrink-0 cursor-default"
+                        <img src={photoUrl(p)} alt=""
+                             class="h-5 w-5 rounded-full object-cover object-top shrink-0 cursor-default"
                              on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }}
-                             on:mouseenter={(e) => showPhoto(e, p.nhl_id)}
+                             on:mouseenter={(e) => showPhoto(e, p)}
                              on:mousemove={movePhoto}
                              on:mouseleave={hidePhoto} />
                       {/if}
@@ -290,12 +294,12 @@
                     <td class="pl-3 text-rwha-muted sticky left-0 bg-rwha-surface">G</td>
                     <td class="text-left pl-2 sticky left-5 bg-rwha-surface text-rwha-muted">
                       <div class="flex items-center gap-1.5">
-                        {#if photoUrl(p.nhl_id)}
+                        {#if photoUrl(p)}
                           <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-                          <img src={photoUrl(p.nhl_id)} alt=""
-                               class="h-5 w-5 rounded-full object-cover shrink-0 cursor-default"
+                          <img src={photoUrl(p)} alt=""
+                               class="h-5 w-5 rounded-full object-cover object-top shrink-0 cursor-default"
                                on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }}
-                               on:mouseenter={(e) => showPhoto(e, p.nhl_id)}
+                               on:mouseenter={(e) => showPhoto(e, p)}
                                on:mousemove={movePhoto}
                                on:mouseleave={hidePhoto} />
                         {/if}
