@@ -78,7 +78,7 @@ function buildSql(): string {
     Flyers:    { conf: 1, div: 'Jofa'   }, Giants:    { conf: 1, div: 'Jofa'   },
     Warheads:  { conf: 1, div: 'Jofa'   }, Steamers:  { conf: 1, div: 'Jofa'   },
     Riots:     { conf: 1, div: 'Jofa'   }, Meltdown:  { conf: 1, div: 'Jofa'   },
-    Marauders: { conf: 1, div: 'Titan'  }, WaffleBots:{ conf: 1, div: 'Titan'  },
+    Marauders: { conf: 1, div: 'Titan'  }, Boobys:    { conf: 1, div: 'Titan'  },
     Snowdogs:  { conf: 1, div: 'Titan'  }, Oilers:    { conf: 1, div: 'Titan'  },
     Bunnies:   { conf: 1, div: 'Titan'  },
     Aces:      { conf: 2, div: 'Cooper' }, Chiefs:    { conf: 2, div: 'Cooper' },
@@ -86,7 +86,7 @@ function buildSql(): string {
     Phantoms:  { conf: 2, div: 'Cooper' }, Mariners:  { conf: 2, div: 'Cooper' },
     Clan:      { conf: 2, div: 'CCM'    }, Cunts:     { conf: 2, div: 'CCM'    },
     Fletushkas:{ conf: 2, div: 'CCM'    }, Mongoloids:{ conf: 2, div: 'CCM'    },
-    Shitdawgs: { conf: 2, div: 'CCM'    },
+    Shitbirds: { conf: 2, div: 'CCM'    },
   };
   const conf1Names = new Set(
     Object.entries(DIVISION_MAP).filter(([, v]) => v.conf === 1).map(([k]) => k),
