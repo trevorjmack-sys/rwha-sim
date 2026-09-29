@@ -367,11 +367,17 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
         stmts.push(db.prepare(`
           UPDATE players SET team_id = ?, name = ?, position = ?, is_goalie = ?, ov = ?, attrs = ?,
                  age = ?, contract_yrs = ?, salary = ?, roster_level = ?, is_scratch = ?,
-                 rwha_id = ?, nhl_id = COALESCE(?, nhl_id), is_active = 1
+                 rwha_id = ?, is_active = 1,
+                 -- NHL id: rwha.net's if it has one; else keep one our own lookup
+                 -- found (nhl_lookup_at set); anything else is stale — clear it
+                 -- so the headshot lookup finds the right one.
+                 nhl_id = CASE WHEN ? IS NOT NULL THEN ?
+                               WHEN nhl_lookup_at IS NOT NULL THEN nhl_id
+                               ELSE NULL END
           WHERE id = ?
         `).bind(teamId, fields.name, fields.position, isGoalie, fields.ov, fields.attrs,
                 fields.age, fields.contract, fields.salary, level, isScratch,
-                p.id, fields.nhlId, existing.id));
+                p.id, fields.nhlId, fields.nhlId, existing.id));
         summary.updated++;
       } else {
         const jersey = intOrNull(p.jersey);
