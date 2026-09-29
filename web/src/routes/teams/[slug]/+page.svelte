@@ -58,7 +58,7 @@
   $: nextGame = games.find(g => g.status !== 'complete');
 </script>
 
-<svelte:head><title>{team.name} — RWHA Sim</title></svelte:head>
+<svelte:head><title>{team.name} — RWHABL</title></svelte:head>
 
 <!-- ── Team header ────────────────────────────────────────────────────────────── -->
 <div class="mb-5">
