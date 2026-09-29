@@ -57,6 +57,27 @@
             <div class="text-right shrink-0 font-mono">
               <div class="text-rwha-amber font-bold">{s.g}–{s.a}–{s.pts}</div>
               <div class="text-rwha-muted text-xs">G–A–PTS</div>
+              {#if s.fights > 0 || s.gordieHowes > 0 || s.michigans > 0}
+                <div class="flex flex-wrap justify-end gap-1 mt-1">
+                  {#if s.fights > 0}
+                    <span class="text-[10px] text-rwha-muted border border-rwha-border rounded px-1">
+                      {s.fights === 1 ? 'FIGHT' : `${s.fights} FIGHTS`}{s.fightWins > 0 ? ` · ${s.fightWins}W` : ''}
+                    </span>
+                  {/if}
+                  {#if s.gordieHowes > 0}
+                    <span class="text-[10px] text-rwha-amber border border-rwha-amber/50 rounded px-1"
+                          title="Goal, assist and a fight in the same game">
+                      {s.gordieHowes > 1 ? `${s.gordieHowes}× ` : ''}GORDIE HOWE
+                    </span>
+                  {/if}
+                  {#if s.michigans > 0}
+                    <span class="text-[10px] text-rwha-green border border-rwha-green/50 rounded px-1"
+                          title="Scored a lacrosse-style Michigan goal">
+                      {s.michigans > 1 ? `${s.michigans}× ` : ''}MICHIGAN
+                    </span>
+                  {/if}
+                </div>
+              {/if}
             </div>
           </div>
         {/each}
@@ -164,6 +185,10 @@
                   {/if}
                   {#if f.homeGameMisconduct || f.awayGameMisconduct}
                     <span class="ml-1 font-mono text-[10px] text-rwha-red border border-rwha-red/40 rounded px-1">+GM</span>
+                  {/if}
+                  {#if f.afterMichigan}
+                    <span class="ml-1 font-mono text-[10px] text-rwha-green border border-rwha-green/50 rounded px-1"
+                          title="Fight started right after a Michigan goal">MICHIGAN</span>
                   {/if}
                 </td>
               </tr>

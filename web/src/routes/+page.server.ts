@@ -1,13 +1,12 @@
 import type { PageServerLoad } from './$types';
 import { getActiveSeasonId } from '$lib/server/db';
-import type { FightEvent } from '$engine/types';
+import type { FightEvent, GoalEvent, SkaterStatLine } from '$engine/types';
+import { compareStars, type StarLine } from '$engine/stars';
 
-export interface WeeklyStar {
+export interface WeeklyStar extends StarLine {
   rank: 1 | 2 | 3;
   playerName: string;
   teamName: string;
-  g: number;
-  a: number;
   pts: number;
 }
 
@@ -24,6 +23,7 @@ export interface FightDisplay {
   outcome: 'home' | 'away' | 'draw';
   homeGameMisconduct: boolean;
   awayGameMisconduct: boolean;
+  afterMichigan: boolean;
 }
 
 export interface PimLeader {
@@ -82,11 +82,33 @@ export const load: PageServerLoad = async ({ platform }) => {
     box_score_json: string;
   }>();
 
-  // Extract fights from each game's box score
+  // Extract fights from each game's box score, and tally each skater's week
+  // for the three stars: goals, assists, fights, Gordie Howes, Michigans.
   const fights: FightDisplay[] = [];
+  const week_: Map<string, WeeklyStar> = new Map();
   for (const g of weekGames.results) {
     try {
       const box = JSON.parse(g.box_score_json);
+      const gameFights = (box.fights ?? []) as FightEvent[];
+      const gameGoals  = (box.goals  ?? []) as GoalEvent[];
+      const homeName   = box.home?.team ?? g.home_name;
+      for (const s of (box.skaters ?? []) as SkaterStatLine[]) {
+        const isHome = s.team === homeName;
+        const mine = gameFights.filter(f => (isHome ? f.homePlayer : f.awayPlayer) === s.name);
+        const michigans = gameGoals.filter(x => x.michigan && x.team === s.team && x.scorer === s.name).length;
+        if (s.g + s.a + mine.length === 0) continue;
+        const key = `${s.team}|${s.name}`;
+        const w = week_.get(key) ?? {
+          rank: 1, playerName: s.name, teamName: s.team,
+          g: 0, a: 0, pts: 0, fights: 0, fightWins: 0, gordieHowes: 0, michigans: 0,
+        } as WeeklyStar;
+        w.g += s.g; w.a += s.a; w.pts += s.g + s.a;
+        w.fights += mine.length;
+        w.fightWins += mine.filter(f => f.outcome === (isHome ? 'home' : 'away')).length;
+        if (s.g > 0 && s.a > 0 && mine.length > 0) w.gordieHowes++;
+        w.michigans += michigans;
+        week_.set(key, w);
+      }
       for (const f of (box.fights ?? []) as FightEvent[]) {
         fights.push({
           gameId:  g.game_id,
@@ -101,30 +123,14 @@ export const load: PageServerLoad = async ({ platform }) => {
           outcome:  f.outcome,
           homeGameMisconduct: f.homeGameMisconduct ?? false,
           awayGameMisconduct: f.awayGameMisconduct ?? false,
+          afterMichigan: f.afterMichigan ?? false,
         });
       }
     } catch { /* skip malformed box score */ }
   }
 
-  // Three stars of the week — top 3 point scorers across all games this week
-  const [starRows, pimRows] = await Promise.all([
-    db.prepare(`
-      SELECT p.name  AS playerName,
-             t.name  AS teamName,
-             SUM(s.g)         AS g,
-             SUM(s.a)         AS a,
-             SUM(s.g + s.a)   AS pts
-      FROM skater_game_stats s
-      JOIN scheduled_games sg ON sg.id = s.game_id
-      JOIN players p ON p.id = s.player_id
-      JOIN teams   t ON t.id = s.team_id
-      WHERE sg.season_id = ? AND sg.week = ?
-      GROUP BY s.player_id
-      ORDER BY pts DESC, g DESC
-      LIMIT 3
-    `).bind(seasonId, week).all<{ playerName: string; teamName: string; g: number; a: number; pts: number }>(),
-
-    // Season PIM leaders
+  // Season PIM leaders
+  const [pimRows] = await Promise.all([
     db.prepare(`
       SELECT p.name  AS playerName,
              t.name  AS teamName,
@@ -141,10 +147,12 @@ export const load: PageServerLoad = async ({ platform }) => {
     `).bind(seasonId).all<PimLeader>(),
   ]);
 
-  const stars: WeeklyStar[] = starRows.results.map((r, i) => ({
-    rank: (i + 1) as 1 | 2 | 3,
-    ...r,
-  }));
+  // Three stars of the week — goals, assists and fights, with bonuses for a
+  // Gordie Howe hat trick and a Michigan (see $engine/stars).
+  const stars: WeeklyStar[] = [...week_.values()]
+    .sort(compareStars)
+    .slice(0, 3)
+    .map((s, i) => ({ ...s, rank: (i + 1) as 1 | 2 | 3 }));
 
   return { stars, fights, pimLeaders: pimRows.results, week, seasonName };
 };
