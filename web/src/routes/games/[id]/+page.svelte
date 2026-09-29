@@ -186,10 +186,33 @@
         {#if f.outcome === 'draw'}
           <span class="text-xs bg-rwha-surface border border-rwha-border rounded px-1 py-0 leading-4 text-rwha-muted">DRW</span>
         {/if}
+        {#if f.afterInjury}
+          <span class="text-xs text-rwha-red border border-rwha-red/50 rounded px-1 py-0 leading-4"
+                title="A teammate answered the hit that injured a player">AFTER THE INJURY</span>
+        {/if}
         {#if f.afterMichigan}
           <span class="text-xs text-rwha-green border border-rwha-green/50 rounded px-1 py-0 leading-4"
                 title="Someone took exception to the Michigan">AFTER THE MICHIGAN</span>
         {/if}
+      </div>
+    {/each}
+  </div>
+{/if}
+
+<!-- ── Injuries ─────────────────────────────────────────────────────────────── -->
+{#if data.injuries.length > 0}
+  <div class="section-header">Injuries</div>
+  <div class="card mb-5 divide-y divide-rwha-border/40">
+    {#each data.injuries as inj}
+      <div class="flex items-baseline gap-2 px-4 py-2 text-sm font-mono flex-wrap">
+        <span class="text-rwha-muted w-6 text-right shrink-0">{pLabelNum(inj.period)}</span>
+        <span class="text-rwha-muted w-10 shrink-0">{inj.time}</span>
+        <span class="text-rwha-amber/80 w-12 shrink-0 uppercase">{inj.team.slice(0, 3)}</span>
+        <span class="text-rwha-red font-semibold">{inj.player}</span>
+        <span class="text-rwha-muted">hurt on a hit by {inj.hitBy}</span>
+        <span class="text-xs text-rwha-red border border-rwha-red/40 rounded px-1 leading-4">
+          OUT {inj.gamesOut} {inj.gamesOut === 1 ? 'GAME' : 'GAMES'}
+        </span>
       </div>
     {/each}
   </div>
