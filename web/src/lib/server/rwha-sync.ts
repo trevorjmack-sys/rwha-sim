@@ -53,6 +53,7 @@ export interface SyncSummary {
   renamed: string[];
   linesReset: string[];
   purged?: number;
+  headshots?: number;
 }
 
 // ── Schema ────────────────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ async function doEnsureSchema(db: D1Database) {
   if (!playerCols.has('is_personal'))   stmts.push(db.prepare(`ALTER TABLE players ADD COLUMN is_personal INTEGER NOT NULL DEFAULT 0`));
   if (!playerCols.has('nhl_id'))        stmts.push(db.prepare(`ALTER TABLE players ADD COLUMN nhl_id INTEGER`));
   if (!playerCols.has('jersey_number')) stmts.push(db.prepare(`ALTER TABLE players ADD COLUMN jersey_number INTEGER`));
+  if (!playerCols.has('nhl_lookup_at')) stmts.push(db.prepare(`ALTER TABLE players ADD COLUMN nhl_lookup_at INTEGER`));
   if (!teamCols.has('rwha_number'))     stmts.push(db.prepare(`ALTER TABLE teams ADD COLUMN rwha_number INTEGER`));
 
   stmts.push(db.prepare(`
@@ -157,6 +159,8 @@ export async function syncRosters(
 
   try {
     const summary = await applySync(db, fetchJson);
+    // Headshots: fill in missing NHL ids (never fails the roster sync).
+    try { summary.headshots = (await fillNhlIds(db, 25)).matched; } catch { /* next time */ }
     await db.prepare(`
       UPDATE roster_sync SET last_success_at = ?, last_summary = ?, last_error = NULL, locked_until = NULL
       WHERE id = 1
@@ -431,4 +435,127 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
   }
 
   return summary;
+}
+
+// ── NHL ids for headshots ─────────────────────────────────────────────────────
+//
+// Roster pages show photos from puckpedia.com keyed by NHL player id. rwha.net
+// only supplies that id for some players, so we look the rest up:
+//   1. one request for the NHL's full active-player list (covers most), then
+//   2. a per-name search for the leftovers (prospects, recently retired),
+//      capped by `budget` so a single Worker request stays under Cloudflare's
+//      subrequest limit. Players we can't find (e.g. the league's personal
+//      players) aren't retried for two weeks.
+
+const NHL_SEARCH = 'https://search.d3.nhle.com/api/v1/search/player?culture=en-us';
+const LOOKUP_RETRY_MS = 14 * 24 * 60 * 60 * 1000;
+
+interface NhlPlayer { playerId: string | number; name: string; positionCode: string; lastSeasonId?: string | null }
+
+const NICKNAMES: string[][] = [
+  ['thomas', 'tom', 'tommy'], ['michael', 'mike', 'mikey'], ['jacob', 'jake'], ['joshua', 'josh'],
+  ['nicholas', 'nicolas', 'nick', 'nic', 'nico'], ['alexander', 'alexandre', 'alex', 'sasha'],
+  ['matthew', 'matt', 'matty'], ['zachary', 'zach', 'zack'], ['christopher', 'chris'],
+  ['samuel', 'sam'], ['mitchell', 'mitch'], ['daniel', 'dan', 'danny'], ['william', 'will', 'bill'],
+  ['benjamin', 'ben'], ['jonathan', 'jon'], ['joseph', 'joe', 'joey'], ['anthony', 'tony'],
+  ['maxim', 'max', 'maxime'], ['evgeni', 'evgeny', 'evgenii'], ['alexei', 'aleksei', 'alexey'],
+  ['yegor', 'egor'], ['dmitri', 'dmitry'], ['cameron', 'cam'], ['patrick', 'pat'],
+  ['robert', 'rob', 'bobby'], ['timothy', 'tim'], ['edward', 'eddie'], ['jeffrey', 'jeff'],
+];
+
+function firstNamesCompatible(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a))) return true;
+  return NICKNAMES.some(g => g.includes(a) && g.includes(b));
+}
+
+const kindOf = (pos: string) => pos === 'G' ? 'G' : pos.includes('D') && !/[CLR]/.test(pos) ? 'D' : 'F';
+
+/** Best NHL match for one of our players among `cands`, or null. Exported for tests. */
+export function matchNhl(name: string, ourPos: string, cands: NhlPlayer[]): NhlPlayer | null {
+  const want = kindOf(ourPos);
+  const ours = normName(name).split(' ');
+  const sameKind = cands.filter(c => kindOf(c.positionCode) === want ||
+    // RWHA sometimes lists D-men as forwards and vice versa; goalies never mix
+    (want !== 'G' && kindOf(c.positionCode) !== 'G'));
+  const newest = (list: NhlPlayer[]) =>
+    [...list].sort((x, y) => Number(y.lastSeasonId ?? 0) - Number(x.lastSeasonId ?? 0))[0] ?? null;
+
+  const exact = sameKind.filter(c => normName(c.name) === ours.join(' '));
+  const exactSamePos = exact.filter(c => kindOf(c.positionCode) === want);
+  if (exactSamePos.length === 1) return exactSamePos[0]!;
+  if (exactSamePos.length > 1) return newest(exactSamePos);
+  if (exact.length === 1) return exact[0]!;
+
+  // Same last name(s), compatible first name (Matt/Matthew, Tommy/Thomas…).
+  const loose = sameKind.filter(c => {
+    const theirs = normName(c.name).split(' ');
+    return theirs.slice(1).join(' ') === ours.slice(1).join(' ') &&
+           firstNamesCompatible(theirs[0]!, ours[0]!) && kindOf(c.positionCode) === want;
+  });
+  return loose.length === 1 ? loose[0]! : null;
+}
+
+export async function fillNhlIds(
+  db: D1Database,
+  budget: number,
+  fetchJson: (url: string) => Promise<unknown> = async url => {
+    const r = await fetch(url, { headers: { accept: 'application/json' } });
+    if (!r.ok) throw new Error(`NHL search → HTTP ${r.status}`);
+    return r.json();
+  },
+): Promise<{ matched: number; checked: number; remaining: number }> {
+  await ensureSchema(db);
+  const now = Date.now();
+  const { results: todo } = await db.prepare(`
+    SELECT p.id, p.name, p.position FROM players p
+    JOIN teams t ON t.id = p.team_id
+    JOIN seasons s ON s.id = t.season_id AND s.status = 'active'
+    WHERE p.is_active = 1 AND p.nhl_id IS NULL
+      AND (p.nhl_lookup_at IS NULL OR p.nhl_lookup_at < ?)
+    ORDER BY p.nhl_lookup_at IS NOT NULL, p.id
+  `).bind(now - LOOKUP_RETRY_MS).all<{ id: number; name: string; position: string }>();
+  if (todo.length === 0 || budget < 1) return { matched: 0, checked: 0, remaining: todo.length };
+
+  const found = new Map<number, number>();   // our player id → NHL id
+  const checked = new Set<number>();
+
+  // 1. The full active list, one request.
+  const active = await fetchJson(`${NHL_SEARCH}&limit=5000&q=*&active=true`) as NhlPlayer[];
+  let used = 1;
+  const byLast = new Map<string, NhlPlayer[]>();
+  for (const p of active) {
+    const last = normName(p.name).split(' ').slice(1).join(' ');
+    byLast.set(last, [...(byLast.get(last) ?? []), p]);
+  }
+  const leftovers: typeof todo = [];
+  for (const p of todo) {
+    const last = normName(p.name).split(' ').slice(1).join(' ');
+    const m = matchNhl(p.name, p.position, byLast.get(last) ?? []);
+    if (m) { found.set(p.id, Number(m.playerId)); checked.add(p.id); }
+    else leftovers.push(p);
+  }
+
+  // 2. Per-name searches for the rest, within budget.
+  for (const p of leftovers) {
+    if (used >= budget) break;
+    used++;
+    checked.add(p.id);
+    try {
+      const hits = await fetchJson(`${NHL_SEARCH}&limit=20&q=${encodeURIComponent(p.name)}`) as NhlPlayer[];
+      const m = matchNhl(p.name, p.position, hits);
+      if (m) found.set(p.id, Number(m.playerId));
+    } catch { /* try again on a later run */ checked.delete(p.id); }
+  }
+
+  const stmts: D1PreparedStatement[] = [];
+  for (const id of checked) {
+    const nhl = found.get(id);
+    stmts.push(nhl
+      ? db.prepare(`UPDATE players SET nhl_id = ?, nhl_lookup_at = ? WHERE id = ?`).bind(nhl, now, id)
+      : db.prepare(`UPDATE players SET nhl_lookup_at = ? WHERE id = ?`).bind(now, id));
+  }
+  for (let i = 0; i < stmts.length; i += 100) await db.batch(stmts.slice(i, i + 100));
+
+  return { matched: found.size, checked: checked.size, remaining: todo.length - checked.size };
 }
