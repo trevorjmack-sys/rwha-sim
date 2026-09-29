@@ -136,6 +136,50 @@
     return new Promise(r => setTimeout(r, ms));
   }
 
+  // ── rwha.net roster sync ───────────────────────────────────────────────────
+  let syncBusy    = false;
+  let syncMessage = '';
+  let lastSyncAt: number | null = data.syncStatus?.lastSuccessAt ?? null;
+
+  function timeAgo(ms: number | null) {
+    if (!ms) return 'never';
+    const mins = Math.round((Date.now() - ms) / 60000);
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 48)  return `${hrs} hr ago`;
+    return `${Math.round(hrs / 24)} days ago`;
+  }
+
+  function describe(s: { added: string[]; moved: string[]; removed: string[]; renamed: string[] }) {
+    const parts = [
+      s.added.length   ? `${s.added.length} added`     : '',
+      s.moved.length   ? `${s.moved.length} moved`     : '',
+      s.removed.length ? `${s.removed.length} removed` : '',
+      s.renamed.length ? `${s.renamed.length} team renamed` : '',
+    ].filter(Boolean);
+    return parts.length ? parts.join(' · ') : 'no roster changes';
+  }
+
+  async function syncRostersNow() {
+    syncBusy = true;
+    syncMessage = '';
+    try {
+      const res  = await fetch('/api/admin/sync-rosters', { method: 'POST' });
+      const body = await res.json();
+      if (body.ok) {
+        lastSyncAt  = body.syncedAt;
+        syncMessage = 'Synced — ' + describe(body.summary);
+      } else {
+        syncMessage = 'Sync failed: ' + body.error;
+      }
+    } catch (e) {
+      syncMessage = 'Sync failed: ' + (e instanceof Error ? e.message : String(e));
+    } finally {
+      syncBusy = false;
+    }
+  }
+
   async function resetSeason() {
     resetBusy = true;
     try {
@@ -191,7 +235,17 @@
                 border-rwha-text text-rwha-text hover:border-rwha-amber hover:text-rwha-amber transition-colors">
         🔥 Rivalries
       </a>
+      <button on:click={syncRostersNow} disabled={syncBusy}
+         title="Pull current rosters from rwha.net (runs automatically every two days)"
+         class="inline-block px-4 py-1.5 text-sm font-mono font-bold rounded border-2
+                border-rwha-text text-rwha-text hover:border-rwha-amber hover:text-rwha-amber transition-colors
+                disabled:opacity-50 disabled:cursor-wait">
+        {syncBusy ? '⟳ Syncing…' : '⟳ Sync Rosters'}
+      </button>
     </div>
+    <p class="text-rwha-muted text-xs mt-1 font-mono">
+      Rosters from rwha.net · last synced {timeAgo(lastSyncAt)}{syncMessage ? ` · ${syncMessage}` : (data.syncStatus?.lastSummary && lastSyncAt ? ` · ${describe(data.syncStatus.lastSummary)}` : '')}
+    </p>
     <p class="text-rwha-muted text-sm mt-0.5 font-mono">
       Week {data.currentWeek} · {playedCount}/{data.totalGames} games played · {remaining} remaining
     </p>

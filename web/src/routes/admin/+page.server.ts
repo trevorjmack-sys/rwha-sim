@@ -1,6 +1,7 @@
 import { redirect, error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getActiveSeasonId, getCurrentWeek, getWeekGames } from '$lib/server/db';
+import { getSyncStatus } from '$lib/server/rwha-sync';
 
 export const load: PageServerLoad = async ({ locals, platform }) => {
   if (!locals.user?.isCommissioner) {
@@ -10,14 +11,14 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
   const db = platform?.env.DB;
   if (!db) {
     // Local Vite dev without D1
-    return { weekGames: [], currentWeek: 1, totalGames: 902, playedGames: 0, seasonId: 1 };
+    return { weekGames: [], currentWeek: 1, totalGames: 902, playedGames: 0, seasonId: 1, syncStatus: null };
   }
 
   const seasonId = await getActiveSeasonId(db) ?? 1;
   const currentWeek = await getCurrentWeek(db, seasonId);
 
   // Load this week's games AND next week's (in case current week is done)
-  const [thisWeek, nextWeek, totals] = await Promise.all([
+  const [thisWeek, nextWeek, totals, syncStatus] = await Promise.all([
     getWeekGames(db, seasonId, currentWeek),
     getWeekGames(db, seasonId, currentWeek + 1),
     db.prepare(`
@@ -26,6 +27,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
         SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) AS played
       FROM scheduled_games WHERE season_id = ?
     `).bind(seasonId).first<{ total: number; played: number }>(),
+    getSyncStatus(db).catch(() => null),
   ]);
 
   // Show next week if current week is fully complete
@@ -39,5 +41,6 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
     totalGames:  totals?.total  ?? 902,
     playedGames: totals?.played ?? 0,
     seasonId,
+    syncStatus,
   };
 };
