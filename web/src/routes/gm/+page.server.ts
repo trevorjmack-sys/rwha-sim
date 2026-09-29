@@ -54,7 +54,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
     // Pro cap hit
     db.prepare(`
       SELECT COALESCE(SUM(salary), 0) AS hit
-      FROM players WHERE team_id = ? AND roster_level = 'pro' AND salary IS NOT NULL
+      FROM players WHERE team_id = ? AND is_active = 1 AND roster_level = 'pro' AND salary IS NOT NULL
     `).bind(teamId).first<{ hit: number }>(),
 
     // Roster counts
@@ -64,7 +64,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
         SUM(CASE WHEN roster_level='pro'  AND is_scratch=0 AND is_goalie=1 THEN 1 ELSE 0 END) AS dress_g,
         SUM(CASE WHEN roster_level='pro'  AND is_scratch=1 THEN 1 ELSE 0 END)                  AS scratches,
         SUM(CASE WHEN roster_level='farm' THEN 1 ELSE 0 END)                                   AS farm
-      FROM players WHERE team_id = ?
+      FROM players WHERE team_id = ? AND is_active = 1
     `).bind(teamId).first<{ dress_sk: number; dress_g: number; scratches: number; farm: number }>(),
 
     // Lines preference
