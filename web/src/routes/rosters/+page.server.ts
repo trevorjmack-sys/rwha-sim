@@ -39,7 +39,7 @@ export const load: PageServerLoad = async ({ platform }) => {
       .bind(seasonId).all<{ id: number; name: string; gm_name: string; farm_name: string | null }>(),
     db.prepare(`SELECT id, team_id, name, position, is_goalie, roster_level, ov, age, contract_yrs,
                        salary, injured_games_remaining, is_scratch, nhl_id, attrs
-                FROM players WHERE team_id IN (SELECT id FROM teams WHERE season_id = ?)
+                FROM players WHERE is_active = 1 AND team_id IN (SELECT id FROM teams WHERE season_id = ?)
                 ORDER BY team_id, roster_level DESC, is_goalie, ov DESC`)
       .bind(seasonId).all<{
         id: number; team_id: number; name: string; position: string;
