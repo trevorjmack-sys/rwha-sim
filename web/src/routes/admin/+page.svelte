@@ -214,7 +214,7 @@
 
 </script>
 
-<svelte:head><title>Admin — RWHA Sim</title></svelte:head>
+<svelte:head><title>Admin — RWHABL</title></svelte:head>
 
 <!-- ── Header bar ─────────────────────────────────────────────────────────── -->
 <div class="sticky top-12 z-40 -mx-4 px-4 pt-4 pb-3 mb-2
