@@ -3,26 +3,13 @@
 // Runs inside a Cloudflare Worker (SSR) only.
 
 import type { D1Database }  from '@cloudflare/workers-types';
-import type { Team, Skater, Goalie, Lines } from '$engine/types';
+import type { Team, Skater, Goalie, Lines, InjuryEvent } from '$engine/types';
 import { simulateGame }     from '$engine/sim';
 import { generateLines }    from '$engine/lines';
-import { makeRng, derive }  from '$engine/rng';
 import type { PlayerRow, TeamLinesRow } from './db';
 
-// ── Injury constants ──────────────────────────────────────────────────────────
-// Probability per game: 0.2% (du=99) → 1.0% (du=1).
-// Formula: BASE + RANGE * (99 - du) / 98
-const INJ_BASE  = 0.002;   // min injury prob per game (elite durability)
-const INJ_RANGE = 0.008;   // added prob at du=1 vs du=99
-
-// Severity tiers (weights: 50 / 30 / 15 / 5)
-// games missed = uniform draw within each tier's range [min, max]
-const INJ_TIERS: { w: number; min: number; max: number }[] = [
-  { w: 50, min: 1,  max: 3  },   // minor
-  { w: 30, min: 4,  max: 7  },   // moderate
-  { w: 15, min: 8,  max: 14 },   // significant
-  { w: 5,  min: 15, max: 30 },   // major
-];
+// Injuries happen inside the game engine now (a hit, then a fight) and come
+// back on the box score as `injuries`; see $engine/sim for the rates.
 
 // ── Convert D1 rows → engine Team ────────────────────────────────────────────
 function rowToSkater(r: PlayerRow): Skater {
@@ -247,10 +234,12 @@ export async function runGame(
   await db.batch(stmts);
 
   // D1 batch 2 — injury tick-downs + new injury rolls (separate to stay under D1's 100-stmt limit)
-  const playedSkaterNames = new Set(box.skaters.map(s => s.name));
-  const playedGoalieNames = new Set(box.goalies.map(g => g.name));
   const allPlayers = [...homeData.players, ...awayData.players];
-  const injuryStmts = buildInjuryStmts(db, allPlayers, playedSkaterNames, playedGoalieNames, seed);
+  const teamIdByName = new Map([
+    [homeData.meta.name, gameRow.home_team_id],
+    [awayData.meta.name, gameRow.away_team_id],
+  ]);
+  const injuryStmts = buildInjuryStmts(db, allPlayers, box.injuries ?? [], teamIdByName);
   if (injuryStmts.length > 0) await db.batch(injuryStmts);
 
   // D1 batch 3 — suspension tick-downs + new suspensions from game misconducts
@@ -272,72 +261,39 @@ export async function runGame(
 
 // ── Injury helpers ────────────────────────────────────────────────────────────
 
-/** Injury probability for a player with this durability rating (1–99). */
-function injuryProb(du: number): number {
-  const clamped = Math.max(1, Math.min(99, du));
-  return INJ_BASE + INJ_RANGE * (99 - clamped) / 98;
-}
-
 /**
- * Roll injury checks + tick down existing injuries after a completed game.
- * Returns D1 prepared statements to include in the batch.
+ * Tick down existing injuries and apply the ones that happened in this game.
  *
  * - Already-injured players on both rosters have their counter decremented by 1
  *   (so their injury naturally expires game-by-game).
- * - Players who appeared in the box score and are NOT already injured get a
- *   du-based injury check. If they roll unlucky, they sit out 1–30 games.
- *
- * Uses a sub-RNG derived from the game seed so results are reproducible.
+ * - Players injured on a hit in this game (box.injuries) miss the next
+ *   `gamesOut` games.
  */
 function buildInjuryStmts(
   db: D1Database,
   allPlayers: PlayerRow[],
-  playedSkaterNames: Set<string>,
-  playedGoalieNames: Set<string>,
-  seed: number,
+  injuries: InjuryEvent[],
+  teamIdByName: Map<string, number>,
 ): ReturnType<D1Database['prepare']>[] {
-  const rng   = makeRng(derive(seed, 'injuries'));
   const stmts: ReturnType<D1Database['prepare']>[] = [];
-  const tierWeights = INJ_TIERS.map(t => t.w);
 
   for (const player of allPlayers) {
-    const alreadyInjured = player.injured_games_remaining > 0;
-
-    if (alreadyInjured) {
-      // Tick down by 1 (min 0)
-      const newVal = player.injured_games_remaining - 1;
+    if (player.injured_games_remaining > 0) {
       stmts.push(
         db.prepare('UPDATE players SET injured_games_remaining = ? WHERE id = ?')
-          .bind(newVal, player.id),
+          .bind(player.injured_games_remaining - 1, player.id),
       );
-      continue;   // don't re-roll for already-injured players
     }
+  }
 
-    // Only roll for players who actually appeared in this game
-    const played = player.is_goalie
-      ? playedGoalieNames.has(player.name)
-      : playedSkaterNames.has(player.name);
-    if (!played) continue;
-
-    let du = 50;  // fallback if attrs missing
-    try {
-      const attrs = typeof player.attrs === 'string'
-        ? JSON.parse(player.attrs)
-        : player.attrs;
-      if (typeof attrs?.du === 'number') du = attrs.du;
-    } catch { /* use fallback */ }
-
-    const prob = injuryProb(du);
-    if (!rng.bool(prob)) continue;   // no injury this game
-
-    // Pick severity tier, then a random number of games within that tier
-    const tierIdx    = rng.weighted(tierWeights);
-    const tier       = INJ_TIERS[tierIdx]!;
-    const gamesMissed = rng.int(tier.min, tier.max);
-
+  for (const inj of injuries) {
+    const teamId = teamIdByName.get(inj.team);
+    const player = allPlayers.find(p =>
+      p.name === inj.player && p.team_id === teamId && !!p.is_goalie === inj.isGoalie);
+    if (!player) continue;
     stmts.push(
       db.prepare('UPDATE players SET injured_games_remaining = ? WHERE id = ?')
-        .bind(gamesMissed, player.id),
+        .bind(inj.gamesOut, player.id),
     );
   }
 
