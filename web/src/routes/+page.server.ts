@@ -24,6 +24,7 @@ export interface FightDisplay {
   homeGameMisconduct: boolean;
   awayGameMisconduct: boolean;
   afterMichigan: boolean;
+  afterInjury: boolean;
 }
 
 export interface PimLeader {
@@ -124,6 +125,7 @@ export const load: PageServerLoad = async ({ platform }) => {
           homeGameMisconduct: f.homeGameMisconduct ?? false,
           awayGameMisconduct: f.awayGameMisconduct ?? false,
           afterMichigan: f.afterMichigan ?? false,
+          afterInjury: f.afterInjury ?? false,
         });
       }
     } catch { /* skip malformed box score */ }
