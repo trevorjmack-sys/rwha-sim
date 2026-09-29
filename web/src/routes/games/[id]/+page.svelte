@@ -148,6 +148,7 @@
           {g.strength !== 'EV' ? `[${g.strength}] ` : ''}{g.scorer}
           {#if g.emptyNet}<span class="text-rwha-muted text-xs"> (EN)</span>{/if}
           {#if g.gameWinner}<span class="text-rwha-green text-xs"> ★GWG</span>{/if}
+          {#if g.michigan}<span class="text-rwha-green text-xs" title="Lacrosse-style wraparound"> ⚡MICHIGAN</span>{/if}
         </span>
         {#if g.assists.length > 0}
           <span class="text-rwha-muted">from {g.assists.join(', ')}</span>
@@ -184,6 +185,10 @@
         {/if}
         {#if f.outcome === 'draw'}
           <span class="text-xs bg-rwha-surface border border-rwha-border rounded px-1 py-0 leading-4 text-rwha-muted">DRW</span>
+        {/if}
+        {#if f.afterMichigan}
+          <span class="text-xs text-rwha-green border border-rwha-green/50 rounded px-1 py-0 leading-4"
+                title="Someone took exception to the Michigan">AFTER THE MICHIGAN</span>
         {/if}
       </div>
     {/each}
