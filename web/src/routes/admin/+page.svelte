@@ -14,7 +14,7 @@
     awayGoals?: number;
     finalLabel?:string;
     boxScore?:  unknown;
-    goals?:     { period: number; time: string; team: string; scorer: string; assists: string[]; strength: string }[];
+    goals?:     { period: number; time: string; team: string; scorer: string; assists: string[]; strength: string; michigan?: boolean }[];
     goalsRevealed: number;  // how many goal lines have appeared so far
   };
 
@@ -395,6 +395,7 @@
               <span class="text-rwha-muted">{goal.time}</span>
               <span class="text-rwha-amber/80 w-12 shrink-0">{goal.team.slice(0, 3).toUpperCase()}</span>
               <span class="text-rwha-amber font-semibold">{goal.strength !== 'EV' ? `[${goal.strength}] ` : ''}{goal.scorer}</span>
+              {#if goal.michigan}<span class="text-rwha-green">⚡MICHIGAN</span>{/if}
               {#if goal.assists.length > 0}
                 <span class="text-rwha-muted">from {goal.assists.join(', ')}</span>
               {:else}
