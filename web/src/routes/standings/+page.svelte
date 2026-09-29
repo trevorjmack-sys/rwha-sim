@@ -63,7 +63,7 @@
 </script>
 
 <svelte:head>
-  <title>RWHA Sim</title>
+  <title>RWHABL</title>
 </svelte:head>
 
 <!-- Page header -->
