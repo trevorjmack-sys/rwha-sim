@@ -52,6 +52,7 @@ export interface SyncSummary {
   removed: string[];
   renamed: string[];
   linesReset: string[];
+  purged?: number;
 }
 
 // ── Schema ────────────────────────────────────────────────────────────────────
@@ -245,16 +246,16 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
     .bind(season.id).all<{ id: number; name: string; rwha_number: number | null }>();
 
   const { results: players } = await db.prepare(`
-    SELECT id, team_id, name, roster_level, is_scratch, is_active, is_personal, rwha_id
+    SELECT id, team_id, name, is_goalie, roster_level, is_scratch, is_active, is_personal, rwha_id
     FROM players WHERE team_id IN (SELECT id FROM teams WHERE season_id = ?)
   `).bind(season.id).all<{
-    id: number; team_id: number; name: string; roster_level: string; is_scratch: number;
+    id: number; team_id: number; name: string; is_goalie: number; roster_level: string; is_scratch: number;
     is_active: number; is_personal: number; rwha_id: number | null;
   }>();
 
   const summary: SyncSummary = {
     teams: 0, players: 0, updated: 0,
-    added: [], moved: [], removed: [], renamed: [], linesReset: [],
+    added: [], moved: [], removed: [], renamed: [], linesReset: [], purged: 0,
   };
   const stmts: D1PreparedStatement[] = [];
   const teamNameById = new Map(teams.map(t => [t.id, t.name]));
@@ -313,7 +314,13 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
   summary.teams = teamIdByNumber.size;
 
   // 4. Match players: rwha id → same-team name → unique league-wide name.
-  const byRwhaId = new Map(players.filter(p => p.rwha_id != null).map(p => [p.rwha_id!, p]));
+  //    rwha.net numbers skaters and goalies separately, so the id is only
+  //    unique together with the player type. Active rows win over hidden ones.
+  const idKey = (isGoalie: number, id: number) => `${isGoalie ? 'g' : 's'}:${id}`;
+  const byRwhaId = new Map<string, (typeof players)[number]>();
+  for (const p of [...players].sort((a, b) => a.is_active - b.is_active)) {
+    if (p.rwha_id != null) byRwhaId.set(idKey(p.is_goalie, p.rwha_id), p);
+  }
   const claimed  = new Set<number>();
   const byName   = new Map<string, typeof players>();
   for (const p of players) {
@@ -336,9 +343,9 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
         salary: intOrNull(p.salary), nhlId: intOrNull(p.nhl_id),
       };
 
-      let existing = byRwhaId.get(p.id);
+      let existing = byRwhaId.get(idKey(isGoalie, p.id));
       if (!existing) {
-        const cands = (byName.get(normName(p.name)) ?? []).filter(c => !claimed.has(c.id));
+        const cands = (byName.get(normName(p.name)) ?? []).filter(c => !claimed.has(c.id) && c.is_goalie === isGoalie);
         existing = cands.find(c => c.team_id === teamId) ?? (cands.length === 1 ? cands[0] : undefined);
       }
 
@@ -389,6 +396,16 @@ async function applySync(db: D1Database, fetchJson: (path: string) => Promise<un
   for (let i = 0; i < stmts.length; i += 100) {
     await db.batch(stmts.slice(i, i + 100));
   }
+
+  // 6b. Hidden players with no game stats serve no purpose — delete them.
+  const purge = await db.prepare(`
+    DELETE FROM players
+    WHERE is_active = 0
+      AND team_id IN (SELECT id FROM teams WHERE season_id = ?)
+      AND id NOT IN (SELECT player_id FROM skater_game_stats)
+      AND id NOT IN (SELECT player_id FROM goalie_game_stats)
+  `).bind(season.id).run();
+  summary.purged = purge.meta.changes ?? 0;
 
   // 7. GM-set lines that now reference a player who left the team fall back
   //    to computer lines (the saved lines are kept for the GM to edit).
