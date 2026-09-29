@@ -35,7 +35,7 @@
   }
 </script>
 
-<svelte:head><title>Team Stats — RWHA Sim</title></svelte:head>
+<svelte:head><title>Team Stats — RWHABL</title></svelte:head>
 
 <div class="mb-5 flex items-end justify-between">
   <h1 class="font-mono font-bold text-rwha-amber text-lg tracking-wider uppercase">Team Stats</h1>
