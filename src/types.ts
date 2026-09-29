@@ -199,6 +199,20 @@ export interface FightEvent {
   homeGameMisconduct?: boolean;
   awayGameMisconduct?: boolean;
   afterMichigan?: boolean;   // someone took exception to a Michigan goal
+  afterInjury?: boolean;     // a teammate answered the hit that injured someone
+}
+
+// A player hurt on a hit during the game. He finishes this game in the box
+// score but misses the next `gamesOut` games.
+export interface InjuryEvent {
+  period: number;
+  time: string;
+  team: string;        // injured player's team
+  player: string;
+  isGoalie: boolean;
+  hitBy: string;       // opponent who delivered the hit
+  hitByTeam: string;
+  gamesOut: number;
 }
 
 export interface SkaterStatLine {
@@ -255,6 +269,7 @@ export interface BoxScore {
   goals: GoalEvent[];
   penalties: PenaltyEvent[];
   fights: FightEvent[];
+  injuries?: InjuryEvent[];
   skaters: SkaterStatLine[];
   goalies: GoalieStatLine[];
   threeStars: [ThreeStar, ThreeStar, ThreeStar];

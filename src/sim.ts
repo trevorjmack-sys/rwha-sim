@@ -10,7 +10,7 @@
 
 import type {
   Team, Lines, Skater, Goalie, BoxScore, GoalEvent, PenaltyEvent,
-  FightEvent, SkaterStatLine, GoalieStatLine, TeamGameTotals, ThreeStar,
+  FightEvent, InjuryEvent, SkaterStatLine, GoalieStatLine, TeamGameTotals, ThreeStar,
   Strength, PPUnit, PKUnit,
 } from './types.ts';
 import { generateLines } from './lines.ts';
@@ -31,8 +31,23 @@ const PERIOD_LENGTH = 20 * 60; // seconds
 const OT_LENGTH     = 5  * 60;
 
 // Beer-league flourishes
-const SCORING_BOOST = 1.08;   // TUNE: multiplies each shot's chance of going in
-const MICHIGAN_RATE = 1 / 50; // chance per game of a Michigan (lacrosse wraparound) goal
+const SCORING_BOOST = 1.12;   // TUNE: multiplies each shot's chance of going in
+const MICHIGAN_RATE = 1 / 37; // per-game roll; lands ~1 in 40 games (needs an EV goal by a forward)
+
+// Injuries: per-player chance per game, scaled by durability (DU 99 → 0.2%,
+// DU 1 → 1.0%). Every injury comes from a hit, and a teammate answers it.
+export const INJ_BASE  = 0.002;
+export const INJ_RANGE = 0.008;
+export const INJ_TIERS: { w: number; min: number; max: number }[] = [
+  { w: 50, min: 1,  max: 3  },   // minor
+  { w: 30, min: 4,  max: 7  },   // moderate
+  { w: 15, min: 8,  max: 14 },   // significant
+  { w: 5,  min: 15, max: 30 },   // major
+];
+export function injuryProb(du: number): number {
+  const clamped = Math.max(1, Math.min(99, du));
+  return INJ_BASE + INJ_RANGE * (99 - clamped) / 98;
+}
 
 // Penalty infraction palette — sampled by DI weighting (Phase 1: uniform).
 const INFRACTIONS = [
@@ -233,6 +248,19 @@ export function simulateGame(
     const michiganFight = addMichigan(goals, home, homeLines, away, awayLines, rng);
     if (michiganFight) fights.push(michiganFight);
   }
+
+  // ── Injuries — each one a hit, each hit answered with a fight ────────────
+  const injuries: InjuryEvent[] = [];
+  for (const [team, lines, opp, oppLines, isHome] of [[home, homeLines, away, awayLines, true], [away, awayLines, home, homeLines, false]] as const) {
+    const dressed: (Skater | Goalie)[] = [...flatSkaters(lines).map(x => x.skater), lines.starter];
+    for (const p of dressed) {
+      if (!rng.bool(injuryProb(p.attrs.du))) continue;
+      const hit = addInjury(p, p === lines.starter, team, lines, opp, oppLines, isHome, rng);
+      injuries.push(hit.injury);
+      fights.push(hit.fight);
+    }
+  }
+  injuries.sort((a, b) => a.period - b.period || a.time.localeCompare(b.time));
   fights.sort((a, b) => a.period - b.period || a.time.localeCompare(b.time));
 
   // ── Per-skater stats ──────────────────────────────────────────────────────
@@ -278,6 +306,7 @@ export function simulateGame(
     goals,
     penalties,
     fights,
+    injuries,
     skaters,
     goalies,
     threeStars,
@@ -516,6 +545,49 @@ function addMichigan(
     homeGameMisconduct: rng.bool(outcome === 'away' ? 0.45 : 0.20) || undefined,
     awayGameMisconduct: rng.bool(outcome === 'home' ? 0.45 : 0.20) || undefined,
     afterMichigan: true,
+  };
+}
+
+/**
+ * An injury on a hit: an opponent (CK-weighted) lays the hit, the player is
+ * out for a number of games, and a teammate (FG-weighted) drops the gloves
+ * with the hitter a few seconds later.
+ */
+function addInjury(
+  player: Skater | Goalie, isGoalie: boolean, team: Team, lines: Lines,
+  opp: Team, oppLines: Lines, injuredIsHome: boolean, rng: RNG,
+): { injury: InjuryEvent; fight: FightEvent } {
+  const oppSkaters = flatSkaters(oppLines).map(x => x.skater);
+  const hitter = oppSkaters[rng.weighted(oppSkaters.map(s => Math.max(1, s.attrs.ck)))]!;
+  const mates = flatSkaters(lines).map(x => x.skater).filter(s => s !== player);
+  const avenger = mates[rng.weighted(mates.map(s => Math.max(1, s.attrs.fg)))]!;
+
+  const period = rng.int(1, 3);
+  const sec = rng.int(60, PERIOD_LENGTH - 60);
+  const tier = INJ_TIERS[rng.weighted(INJ_TIERS.map(t => t.w))]!;
+
+  const homeFighter = injuredIsHome ? avenger : hitter;
+  const awayFighter = injuredIsHome ? hitter : avenger;
+  const hWeight = homeFighter.attrs.fg + homeFighter.attrs.st + rng.normal(0, 10);
+  const aWeight = awayFighter.attrs.fg + awayFighter.attrs.st + rng.normal(0, 10);
+  const diff = hWeight - aWeight;
+  const outcome: FightEvent['outcome'] = Math.abs(diff) < 5 ? 'draw' : diff > 0 ? 'home' : 'away';
+
+  return {
+    injury: {
+      period, time: fmtTime(sec), team: team.name, player: player.name, isGoalie,
+      hitBy: hitter.name, hitByTeam: opp.name, gamesOut: rng.int(tier.min, tier.max),
+    },
+    fight: {
+      period,
+      time: fmtTime(Math.min(PERIOD_LENGTH - 1, sec + rng.int(2, 15))),
+      homePlayer: homeFighter.name,
+      awayPlayer: awayFighter.name,
+      outcome,
+      homeGameMisconduct: rng.bool(outcome === 'away' ? 0.45 : 0.20) || undefined,
+      awayGameMisconduct: rng.bool(outcome === 'home' ? 0.45 : 0.20) || undefined,
+      afterInjury: true,
+    },
   };
 }
 
