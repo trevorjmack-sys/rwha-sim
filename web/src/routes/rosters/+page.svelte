@@ -66,7 +66,7 @@
   </div>
 {/if}
 
-<svelte:head><title>Rosters — RWHA Sim</title></svelte:head>
+<svelte:head><title>Rosters — RWHABL</title></svelte:head>
 
 <!-- Team anchor nav -->
 <div class="mb-5">
