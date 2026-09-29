@@ -239,6 +239,11 @@
                 border-rwha-text text-rwha-text hover:border-rwha-amber hover:text-rwha-amber transition-colors">
         🔥 Rivalries
       </a>
+      <a href="/admin/lineups"
+         class="inline-block px-4 py-1.5 text-sm font-mono font-bold rounded border-2
+                border-rwha-text text-rwha-text hover:border-rwha-amber hover:text-rwha-amber transition-colors">
+        🤖 Lineups
+      </a>
       <button on:click={syncRostersNow} disabled={syncBusy}
          title="Pull current rosters from rwha.net (runs automatically every two days)"
          class="inline-block px-4 py-1.5 text-sm font-mono font-bold rounded border-2
