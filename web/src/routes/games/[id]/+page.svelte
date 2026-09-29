@@ -186,6 +186,10 @@
         {#if f.outcome === 'draw'}
           <span class="text-xs bg-rwha-surface border border-rwha-border rounded px-1 py-0 leading-4 text-rwha-muted">DRW</span>
         {/if}
+        {#if f.goalieFight}
+          <span class="text-xs text-rwha-amber border border-rwha-amber/50 rounded px-1 py-0 leading-4"
+                title="The two starting goalies dropped the gloves">GOALIE FIGHT</span>
+        {/if}
         {#if f.afterInjury}
           <span class="text-xs text-rwha-red border border-rwha-red/50 rounded px-1 py-0 leading-4"
                 title="A teammate answered the hit that injured a player">AFTER THE INJURY</span>
